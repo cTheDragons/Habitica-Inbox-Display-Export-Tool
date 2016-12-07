@@ -1,0 +1,1287 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Inbox Display & Export Tool</title>
+    <base target="_blank">
+
+<!--
+
+This code is licensed under the same terms as Habitica:
+    https://raw.githubusercontent.com/HabitRPG/habitrpg/develop/LICENSE
+
+https://github.com/Alys/tools-for-habitrpg/blob/master/habitrpg_user_data_display.html
+
+https://oldgods.net/habitrpg/habitrpg_user_data_display.html
+    or http://is.gd/hrpguserdata
+
+Contributors:
+    cTheDragons https://github.com/cTheDragons
+	based on code from
+	Alys (Alice Harris), lady_alys@oldgods.net https://github.com/Alys
+    thepeopleseason (James Hsiao) https://github.com/thepeopleseason
+    goldfndr (Richard Finegold) https://github.com/goldfndr
+    Blade Barringer https://github.com/crookedneighbor
+    donoftime https://github.com/donoftime
+    me_and (Adam Dinwoodie) https://github.com/me-and
+	
+
+-->
+
+
+
+    <meta name="description" content="Inbox Display & Export Tool" />
+    <meta name="author" content="cTheDragons" />
+
+	<script src="https://code.jquery.com/jquery-1.12.3.js"></script>
+	<script src="https://momentjs.com/downloads/moment-with-locales.min.js"></script>
+	<script src="js/habitica-markdown.min.js"></script>
+	
+	 <!--- https://datatables.net/download/ -->
+	<script type="text/javascript" src="https://cdn.datatables.net/v/dt/jszip-2.5.0/pdfmake-0.1.18/dt-1.10.12/b-1.2.2/b-colvis-1.2.2/b-flash-1.2.2/b-html5-1.2.2/b-print-1.2.2/se-1.2.0/datatables.min.js"></script>
+	<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/dt/jszip-2.5.0/pdfmake-0.1.18/dt-1.10.12/b-1.2.2/b-colvis-1.2.2/b-flash-1.2.2/b-html5-1.2.2/b-print-1.2.2/se-1.2.0/datatables.min.css"/>
+
+	
+<script type="text/javascript">
+$(function() { // wraps around all our code to not pollute global namespace
+
+//////////////////////////////////////////////////////////////////////
+////   Global Variables                              /////////////////
+//////////////////////////////////////////////////////////////////////
+
+var content;  // holds site-wide content (gear names and stats, quests, etc)
+var user;     // holds user's data
+
+var sectionTables =	[]
+sectionTables['displayInboxSection'] = {
+	type: 'inbox',
+	dataSet: [], 
+	dataSetHeader: ['User Id', 'User', 'Tier', 'Contributor', 'Contributor Contributions', 'Admin', 'Posted', 'Epoch', 'Sent', 'Text'],
+	dataTable: ['uuid', 'userPretty', 'contribPretty.level', 'contribPretty.text', 'contribPretty.contributions', 'contribPretty.admin', 'creation.shortDate', 'timestamp', 'sentPretty', 'textPretty'],
+	babyBear: {show: [0,1,6,8,9], orderBy: [[6, 'desc']]},
+	mamaBear: {show: [0,1,2,3,6,8,9], orderBy: [[6, 'desc']]},
+	papaBear: {show: ['all'], orderBy: [[7, 'desc']]},
+	subTitle: function (){
+		var html = ''
+		return html 
+	}
+}
+
+
+
+var exportOptions = [
+					{id: 'babyBear', shortDesc: 'Baby Bear', longDesc: 'Displays & exports UserId, User, Posted, Sent, Text'},
+					{id: 'mamaBear', shortDesc: 'Mama Bear', longDesc: 'Displays & exports UserId, User, Tier, Contributor, Posted, Sent, Text'},
+					{id: 'papaBear', shortDesc: 'Papa Bear', longDesc: 'Displays & exports UserId, User, Tier, Contributor, Contributor Contributions, Admin, Posted, Epoch, Sent, Text'}
+					];
+var exportFormats = [
+					{id: 0, shortDesc: 'Warm Porridge', longDesc: 'Displays & exports with Emoji & Text converted but HTML removed', convertMarkup: true, removeHtml: true},
+					{id: 1, shortDesc: 'Hot Porridge', longDesc: 'Displays & exports in exact Habitica HTML format', convertMarkup: true, removeHtml: false},
+					{id: 2, shortDesc: 'Cold Porridge', longDesc: 'Displays & exports in raw format', convertMarkup: false, removeHtml: false}
+					];
+					
+//////////////////////////////////////////////////////////////////////
+////   Global Connection Variables      //////////////////////////////
+//////////////////////////////////////////////////////////////////////
+var serverName               = 'Habitica'; // used in "loading" message
+var serverUrl                = 'https://habitica.com/api/v3';
+var serverPathContent        = '/content?language=en';
+var serverPathUser           = '/user';
+var serverPathMarkRead		 = '/user/mark-pms-read'
+var userId                   = '';
+var apiToken                 = '';
+var markReadOption	 		 = '';
+var exportOption 			 = 0;
+var exportFormat			 = 0;
+var debug                    = false;
+var debugShowObject          = false;
+
+if (debug) console.log('debug 1');
+
+var sectionOpen = ''; // holds the ID attribute of a section of the page;
+                      // persists through re-fetch of data so we can
+                      // reopen that section when the new data arrives
+var tellMe = '<a href="https://github.com/cTheDragons">tell me</a>';
+
+//////////////////////////////////////////////////////////////////////
+////   Allow Show/Hide Toggling to work    ///////////////////////////
+//////////////////////////////////////////////////////////////////////
+enableShowHideToggling(); // needed here to enable Version Changes link
+var openRelatedSections = function(){} // redefined later when user data exists
+function enableShowHideToggling() {
+if (debug) console.log('debug enableShowHideToggling');
+    // $('.showHideToggle').click(function(event)
+	//Populate Selector
+	var html =  getExportOptionsHtml()
+	var htmlDesc =  getExportDescHtml()
+	
+	$('#exportOptionSelector').html(html)
+	$('#exportOptionDesc').html(htmlDesc)
+	
+    $('body').on('click', '.showHideToggle', function(event){
+        var target = $(this).data("target");
+        var wantToShow = (! $('#' + target).is(':visible')
+                       || $(this).data("forceopen"));
+            // wantToShow is false if the target is already open
+            // (i.e., the user wants to close it)
+            // unless the toggle's attributes force it to always be
+            // opened (e.g., a link from the dashboard)
+        var linktext = $(this).data("linktext") || false;
+        if ($(this).data("closemainsections")) {
+            $('#MAIN > *').hide();
+        }
+        if (wantToShow) {
+            sectionOpen = target;
+            $('#' + target).show();
+            if (linktext) {
+                $(this).text('hide ' + linktext);
+            }
+            openRelatedSections();
+        }
+        else {
+            $('#' + target).hide();
+            if (linktext) {
+                $(this).text('show ' + linktext);
+            }
+            if ($(this).data("scrolltotop")) {
+                window.scrollTo(0, 0);
+            }
+        }
+        var toggleTarget = $(this).data("resettoggletext") || false;
+        if (toggleTarget) {
+            $('#' + toggleTarget).text('show '
+                        + $('#' + toggleTarget).data("linktext"));
+        }
+    });
+    $('body').on('click', '.mainSectionClose', function(event){
+        $('#headerExport > *').hide();
+		$('#MAIN > *').hide();
+        window.scrollTo(0, 0);
+    });
+	
+	function getExportOptionsHtml()
+	{
+		var html = '';
+		
+		html +=  '<label for="exportOption"><span>Column Option</span>'
+		html +=  '<select name="exportOption" id="exportOption">';
+		if (debugShowObject) console.log(exportOptions);
+		$.each(exportOptions, function(index, obj){
+			html += '<option value="' + obj.id + '">' + obj.shortDesc + '</option>';
+		});
+		html += '</select></label>'
+
+		html +=  '<label for="exportFormat"><span>Text Format</span>'
+		html +=  '<select name="exportFormat" id="exportFormat">';
+		if (debugShowObject) console.log(exportOptions);
+		$.each(exportFormats, function(index, obj){
+			html += '<option value="' + obj.id + '">' + obj.shortDesc + '</option>';
+		});
+		html += '</select></label>'
+
+		
+		return html
+	}
+	
+	function getExportDescHtml()
+	{
+		var html = '';
+		
+		html +=  '<p class="highlight">Column Options Description:</p>'
+		html +=  '<ul>';
+		$.each(exportOptions, function(index, obj){
+			html += '<li><span class="lowlight">' + obj.shortDesc + '</span>: ' + obj.longDesc + '</li>';
+		});
+		html += '</ul>'
+
+		html +=  '<p class="highlight">Text Format Description:</p>'
+		html +=  '<ul>';
+		$.each(exportFormats, function(index, obj){
+			html += '<li><span class="lowlight">' + obj.shortDesc + '</span>: ' + obj.longDesc + '</li>';
+		});
+		html += '</ul>'
+		
+		return html
+	}
+}
+
+
+
+//////////////////////////////////////////////////////////////////////
+////   Get UUID from URL      ////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+var url_vars = getUrlVars();
+if (url_vars.uuid) {
+    $("#userId").val(url_vars.uuid);
+}
+function getUrlVars() {
+    // Function found at http://stackoverflow.com/questions/4656843/jquery-get-querystring-from-url#answer-4656873
+    var vars = [], hash;
+    var hashes = window.location.href.slice(window.location.href.indexOf('?') + 1).split('&');
+    for(var i = 0; i < hashes.length; i++)
+    {
+        hash = hashes[i].split('=');
+        vars.push(hash[0]);
+        vars[hash[0]] = hash[1];
+    }
+    return vars;
+}
+
+
+//////////////////////////////////////////////////////////////////////
+////   Login events      /////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+$('#userApiDetailsForm').submit(function(event){
+if (debug) console.log('debug #userApiDetailsForm (Login Events)');
+	/* The user manually submitted the API connection form. */
+    userId   = $('#userId').val();
+    apiToken = $('#apiToken').val();
+	markReadOption = $('#markReadOption')[0].checked;
+	exportOption = $('#exportOption').val()
+    exportFormat = $('#exportFormat').val()
+if (debugShowObject) console.log('exportFormat: ' + exportFormat );
+	fetchData();
+});
+
+//////////////////////////////////////////////////////////////////////
+////   Login and Data Fetch Functions   //////////////////////////////
+//////////////////////////////////////////////////////////////////////
+function fetchData() {
+    if (debug) console.log('debug 2');
+    $('#loading #serverName').text(serverName);
+    $('#loading .good').show();
+    $('#loading .bad' ).hide();
+
+	var ajaxRunningCount = 2; // drops to 0 when all calls have succeeded	
+
+	// fetch the user's own content (guilds, parties):
+    $.ajax({
+        url: serverUrl + serverPathUser,
+        type: 'GET',
+        dataType: 'json',
+        cache: false,
+        beforeSend: function(xhr){
+                xhr.setRequestHeader('x-api-user', userId);
+                xhr.setRequestHeader('x-api-key',  apiToken);
+            },
+        success: fetchUserSuccess,
+        error: fetchFailure
+    });
+
+	// fetch the site-wide content (gear names and stats, etc):
+    $.ajax({
+        url: serverUrl + serverPathContent,
+        type: 'GET',
+        dataType: 'json',
+        cache: true,
+        success: fetchContentSuccess,
+        error: fetchFailure
+    });
+	
+	
+	function fetchFailure() {
+        if (debug) console.log('debug fetchFailure start');
+        $('#loading .good').hide();
+        $('#loading .bad' ).show();
+        $('#documentationAndForm').show(); // in case user has done a re-fetch
+        $('#documentationAndFormClose').hide();
+        if (debug) console.log('debug fetchFailure end');
+    }
+	function fetchUserSuccess(data) {
+        if (debug) console.log('debug parseData User success start');
+        user = data.data;
+		if (debugShowObject) console.log(user);
+        ajaxRunningCount--;
+        if (ajaxRunningCount === 0) { // all ajax calls have finished
+            parseData();
+        }
+    }
+	function fetchContentSuccess(data) {
+        if (debug) console.log('debug parseData Content success start');
+        content = data.data;
+		if (debugShowObject) console.log(content);
+        ajaxRunningCount--;
+        if (ajaxRunningCount === 0) { // all ajax calls have finished
+            parseData();
+        }
+    }
+}
+
+function postMarkRead() {
+	// fetch the user's own content (guilds, parties):
+    $.ajax({
+        url: serverUrl + serverPathMarkRead,
+        type: 'POST',
+        dataType: 'json',
+        cache: false,
+        beforeSend: function(xhr){
+                xhr.setRequestHeader('x-api-user', userId);
+                xhr.setRequestHeader('x-api-key',  apiToken);
+            },
+        success: postMarkReadSuccess,
+        error: postMarkReadFailure
+    });
+	
+	function postMarkReadFailure() {
+        if (debug) console.log('debug postMarkReadFailure start');
+        $('#loading .good').hide();
+        $('#loading .bad' ).show();
+        $('#documentationAndForm').show(); // in case user has done a re-fetch
+        $('#documentationAndFormClose').hide();
+        if (debug) console.log('debug postMarkReadFailure end');
+    }
+	
+	function postMarkReadSuccess() {
+        if (debug) console.log('debug postMarkReadSuccess start');
+		//Nothing to do
+    }
+}
+
+function downloadTextTable(delim, textDelim, rowDelim, replaceChar1, replaceWith1, replaceChar2, replaceWith2, fileExt) {
+	if (debug) console.log('debug downloadTextTable');	
+	//Need to change to handle multiple formats
+	
+	var fileItem = '';
+    var fileText = '';
+	var finalExportTable = []
+	//var workingExportTable = []
+
+	finalExportTable.push(exportTableHeader)
+	finalExportTable = finalExportTable.concat(exportTable)
+	
+	
+	//Prepare for global replace (Surely there should be a standard formula for this)
+	if (replaceChar1 != '') {
+		replaceChar1 = replaceChar1.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+		var re1 = new RegExp(replaceChar1, 'g');
+	}
+	
+	if (replaceChar2 != '') {
+		replaceChar2 = replaceChar1.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+		var re2 = new RegExp(replaceChar2, 'g');
+	}
+	
+	if (debugShowObject) console.log(finalExportTable);	
+	$.each(finalExportTable, function(index, obj){
+		//if (debugShowObject) console.log(obj);	
+		$.each(obj, function(index2, obj2){
+			fileItem = String(obj2)
+			
+			if (replaceChar1 != '') fileItem = fileItem.replace(re1, replaceWith1);
+			if (replaceChar2 != '') fileItem = fileItem.replace(re2, replaceWith2);
+			//if (debugShowObject) console.log(fileItem);
+			
+			fileText += textDelim + fileItem + textDelim + delim
+		});
+		fileText += rowDelim
+	});
+	
+	//need to remove last delim for each row.
+ 
+    if (debugShowObject) console.log(fileText);
+    var hiddenElement = document.createElement('a');
+    hiddenElement.href = 'data:text/csv;charset=utf-8,' + encodeURI(fileText);
+    hiddenElement.target = '_blank';
+    hiddenElement.download = exportTableFilename + '.' + fileExt;
+    hiddenElement.click();
+}
+
+function parseData() {
+	if (debug) console.log('debug parseData start');
+    // variables for storing the content:
+    var MAIN = {}; // each element defines the HTML for one section on the page
+    var TOC  = {}; // each element defines one Table of Contents entry
+    var DASHBOARD = {}; // each element defines the HTML for one dashboard tile
+
+	var fetchtime = myDateConverter(new Date(), 'pretty');
+
+	var dataSetTable = []; //holds export table
+	var dataSetTableHeader = []; //holds export table
+	var dataSetTableSection = ''; //holds export table
+
+
+	userDataInHeader();
+	
+	// create the content, section by section:
+    //
+    // TO ADD NEW SECTION: add a function here, OR add it within one of the
+    // functions that is already here if appropriate for correct scoping
+    // (e.g., features related to tasks should have their function put
+    // inside collateAndDisplayTaskData):
+    collateAndDisplayData(); //This is one function as memberActivty requires both Member and Guild data.
+
+
+	//////////////////////////////////////////////////////////////////////
+    ////   Display the HTML that the functions have created   ////////////
+    //////////////////////////////////////////////////////////////////////
+    $('#loading .good').hide();
+    $('#documentationAndFormClose').show();
+    $('#documentationAndForm').hide();
+	
+	//formatAndDisplayDASHBOARD();
+    //formatAndDisplayTOC();
+    formatAndDisplayMAIN();
+
+	if (markReadOption == true) postMarkRead()
+	
+	function formatAndDisplayMAIN() {
+		//Currently Single Section
+		var html = '';
+		var functions = []; // functions to run after HTML code has been loaded
+		var functionsPar = []; //Par to be passed in Function
+		
+		var data = MAIN['displayInbox'];
+        if (! data) {
+            //continue;
+        }
+        html += '<div id="' +
+                'MAIN' + data.id     + '"><h2>' +
+                data.title  + '</h2>' +
+                data.html   +
+                ((data.longContent) ? '<div class="mainSectionClose closer">' +
+                                      'close / back to top</div>' : '') +
+                '</div>';
+        if (data['function']) {
+            functions.push(data['function']);
+			functionsPar.push(data['functionPar']);
+        }	
+	
+		
+		
+		//html = '<div id="headerExport"></div>' + html;
+//<hr class="clear" />
+	    $('#MAIN').html(html);
+		//exportOptionInHeader();
+		if (debug) console.log('Main replaced')
+		if (debugShowObject) console.log(html)
+		// execute any functions that need to be run AFTER the bulk of the
+		// HTML has been created:
+		$.each(functions, function(index,fn){
+			var passPar = functionsPar[index];
+			fn(passPar);
+		});
+		if (sectionOpen && sectionOpen != 'documentationAndForm'
+						&& sectionOpen != 'versionChanges'
+		) {
+			// reopen the section that the user had open before re-fetching
+			// data (except for sections that don't display the user's own data):
+			$('#' + sectionOpen).show();
+			openRelatedSections();
+		}
+		if (debug) console.log('End of Main output')
+	}
+	
+	openRelatedSections = function() {
+
+	}
+	
+	function userDataInHeader() {
+		var displayName = user.profile.name;
+		
+		$('#headerExtras').html('<div id="userNameDisplay">' +
+				displayName +
+				'</div>' +
+				'<div id="explanationAndClearLinks">' +
+				'<input id="refetch" type="submit" value="' +
+				'Re-Fetch Data (last fetched ' + fetchtime + ')" />' +
+				'<span id="documentationAndFormToggle" class="showHideToggle" data-target="documentationAndForm" data-linktext="documentation & options" data-closemainsections="true">show documentation & options</span>' +
+				'</div>'  				
+				
+		);
+		$('#refetch').click(function(event){
+			/* The user clicked on the Re-Fetch My Data button. */
+			fetchData();
+		});
+	}
+
+	function exportOptionInHeader() {
+		var displayName = renderFormattedText(user.profile.name, {'removeParaTags':true});
+		
+		$('#headerExport').html('<div id="exportCSVFile">' +
+				'<input id="exportCSVFileButton" type="submit" value="Download CSV File" />' +
+				'</div><div id="exportTabDelimFile">' +
+				'<input id="exportTabDelimFileButton" type="submit" value="Download Tab Delimited File" />' +
+				'</div>'  				
+				
+		);
+		$('#exportCSVFileButton').click(function(event){
+			/* The user clicked on the Re-Fetch My Data button. */
+			downloadTextTable(',', '"', '\n', '"', '\'\'', '', '', 'csv');
+		});
+		
+		$('#exportTabDelimFileButton').click(function(event){
+			/* The user clicked on the Re-Fetch My Data button. */
+			downloadTextTable('\t', '"', '\n', '"', '\'\'', '', '', 'txt');
+		});
+	}
+	function myDateConverter(date, style) { 
+//		if (debug) console.log ('debug My Date Convertor');
+//		if (debugShowObject) console.log (date);
+		//if (typeof date === 'string' || typeof date === 'date') {
+//			date = new Date(date);
+//		}
+//		if (!date || isNaN(date.getTime())) {
+			// Either the object that was passed in is not a Date object,
+			// OR the date string that was passed in could not be converted
+			// to a Date object, presumably because it's in a non-standard
+			// format. We handle this by using today's date. It's a nasty
+			// hack, but it's unlikely to occur, and no one's paying for
+			// anything better.
+//			date = new Date();
+//		}
+
+		if (style === 'pretty') {
+			var dateStr = moment(date).format('Do MMM YYYY, H:mm:ss');
+		} else if (style === 'short') {
+			var dateStr = moment(date).format('YYYY-MM-DD H:mm:ss');
+		} else if (style === 'long') {
+			var dateStr = moment(date).format('ddd Do MMMM YYYY, h:mm:ss a');
+		}	else {
+			var dateStr = moment(date).format(style);
+		}
+		return dateStr;
+	}	
+	
+	function renderFormattedText(text, options) {
+		var md = window.habiticaMarkdown;
+		//$$$ move this out as options
+		if (exportFormats[exportFormat].convertMarkup) text = md.render(text);
+		if (exportFormats[exportFormat].removeHtml) text = $(text).text();
+		return text;
+	}
+	
+	function collateAndDisplayData() {
+		//rearrange data
+		
+		//format collate Data -- one function
+		formatAllDataAndCollateSimpleTables();
+		
+		//create html
+		displayInboxSection()
+		
+		function formatAllDataAndCollateSimpleTables() {
+			if (debug) console.log('debug formatAllDataAndCollateSimpleTables with option ' + String(exportOption))
+			var arrayToAdd = []; 
+			
+			//inbox data format and collate
+			
+			//Clear arrays
+			//$.each(sectionsToDisplay, function(index, obj){
+			//	if (obj.type == 'sectionTable'){
+			//		sectionTables[obj.id].dataSet=[];
+			//	}
+			//});
+			sectionTables['displayInboxSection'].dataSet=[];
+			
+
+			$.each(user.inbox.messages, function(index, obj){
+				modifyInboxProperties(obj);
+				//if (debugShowObject) console.log(obj);
+				//$.each(sectionsToDisplay, function(index2, obj2){
+				//	if (obj2.type == 'sectionTable' && (obj2.showOnly != 'party' || groupId == 'party')){
+				//		if (sectionTables[obj2.id].type == 'chat'){
+							arrayToAdd = []; //clear array
+							$.each(sectionTables['displayInboxSection'].dataTable, function(index3, obj3){
+								arrayToAdd.push(eval('obj.' + obj3))
+							});
+							//Don't include system messatges if chatNotSystemExport
+							sectionTables['displayInboxSection'].dataSet.push(arrayToAdd); 
+				//		}	
+				//	}
+				//})
+				
+			});
+			if (debugShowObject) console.log(sectionTables);
+		};
+		
+		function modifyInboxProperties(obj) {
+			obj.textPretty  = renderFormattedText(obj.text, {'setParaClass':'chatText'});
+			if (obj.uuid == 'system') {
+				obj.userPretty = 'System'
+			} else {
+				obj.userPretty = renderFormattedText(obj.user, {'setParaClass':'userName'});
+			}
+			obj.creation  = reformatDate(obj.timestamp);
+			//if (debugShowObject) console.log(obj);
+			if (obj.contributor.text != undefined ) {
+				obj.contribPretty = [];
+				obj.contribPretty.text = obj.contributor.text;
+				obj.contribPretty.level = obj.contributor.level;
+				obj.contribPretty.contributions = obj.contributor.contributions;
+				if (obj.contributor.admin === true) {
+					obj.contribPretty.admin = 'true'
+				} else {
+					obj.contribPretty.admin  = 'false'
+				}
+			} else {
+				obj.contribPretty = [];
+				obj.contribPretty.text = '';
+				obj.contribPretty.level = '';
+				obj.contribPretty.contributions = '';
+				obj.contribPretty.admin = '';
+			}
+			if (obj.sent === true) {
+				obj.sentPretty = 'true'
+			} else {
+				obj.sentPretty = 'false'
+			}
+		}
+		
+		function reformatDate(dateString) {
+				var formattedDate = myDateConverter(dateString, 'long');
+				var shortDate     = myDateConverter(dateString, 'short');
+				return { 'dateAndTime': formattedDate,
+						 'shortDate': shortDate };
+		}
+		
+		function displayInboxSection() {
+			var id    = 'displayInboxSection';
+			var title = 'Display All Inbox Messages';
+			var subTitle = '' //exportOptions[exportOption].shortDesc + ' with ' + exportFormats[exportFormat].shortDesc + ' Format'
+			var orderId = 'displayInbox';
+			var tableSectionId = 'displayInboxSection';
+			var html = formatTableData(sectionTables['displayInboxSection'].dataSet, sectionTables['displayInboxSection'].dataSetHeader, subTitle, tableSectionId);
+			if (! html) {
+				return;
+			}
+			TOC[orderId] = {'target': id, 'title':  title};
+			MAIN[orderId] = {'id': id, 'title': title, 'longContent': true,
+				'html': html, 'dataSetTbl': sectionTables['displayInboxSection'].dataSet, 'dataSetTblHdr': sectionTables['displayInboxSection'].dataSetHeader, 'dataSetTblFilename': 'inbox', 'dataSetTblSection': tableSectionId, 'function': constructTable, 'functionPar':  ['displayInboxSection', sectionTables['displayInboxSection'].dataSet, sectionTables['displayInboxSection'].dataSetHeader, 'displayInboxSection']};
+				
+			
+		}
+		
+		function formatTableData(objTable, objTableHeader, title, tableId) {
+			var html = '';
+			
+			html += '<table id="' + tableId + '" class="display" width="100%"></table>'
+			
+			if (html) {
+				return '<h3>' + title + '</h3>' + '<p><div id="headerExport"></div></p>' + html ;
+			}
+			else {
+				return '';
+			}
+		}
+		
+		function constructTable(passPar) {
+			//Called in Main to display table(s).
+			//Will need to be added to add buttons and row selection on the fly.
+			
+			if (debug) console.log('debug constructTable');
+			var formattedTableHeader = [];
+			var dataSetSectionId = passPar[0];
+			var dataSetTable = passPar[1];
+			var dataSetTableHeader = passPar[2];
+			var dataSetTableSection = passPar[3];
+			
+			var defaultShow = []
+			var defaultOrderBy = []
+			var buttonCollectionColumnOption = []
+			var selectValue = false
+			var showButtons = []
+			
+			var showOptions = []
+			var hideOptions = []
+		
+		
+		
+			//create column header
+			$.each(dataSetTableHeader, function(index, obj){
+				formattedTableHeader.push({title: obj})
+			});
+			
+		
+			//create export options
+			$.each(exportOptions, function(index, obj){
+				
+				//Work out the hidden column list
+				showOptions[obj.id] = eval('sectionTables[dataSetSectionId].' + obj.id + '.show')
+				hideOptions[obj.id] = [];
+				
+				if (showOptions[obj.id][0] == 'all'){
+					showOptions[obj.id] = []; // clear array
+					for (i = 0; i < sectionTables[dataSetSectionId].dataTable.length; i++) { 
+						showOptions[obj.id].push(i)
+					}
+					
+				} else {
+					for (i = 0; i < sectionTables[dataSetSectionId].dataTable.length; i++) { 
+						if (showOptions[obj.id].indexOf(i) == -1) hideOptions[obj.id].push(i)
+					}
+				}
+				buttonCollectionColumnOption.push({
+									extend: 'colvisGroup',
+									text: obj.shortDesc,
+									show: showOptions[obj.id],
+									hide: hideOptions[obj.id],
+									className: 'columnGroup'
+								})					
+			});
+			buttonCollectionColumnOption.push('columnsToggle')
+			defaultShow = showOptions[exportOption]
+			defaultOrderBy = eval('sectionTables[dataSetSectionId].' + exportOption + '.orderBy')
+			
+			if (debugShowObject) console.log(showOptions);		
+			if (debugShowObject) console.log(hideOptions);	
+
+			showButtons = [
+				 'pageLength', 
+				 {
+					extend: 'collection',
+					text: 'Show/Hide',
+					buttons: buttonCollectionColumnOption
+				},
+				{
+					text: exportFormats[0].shortDesc,
+					action: function ( e, dt, node, config ) {
+						exportFormat = exportFormats[0].id;
+						parseData();
+					}
+				},
+				{
+					text: exportFormats[1].shortDesc,
+					action: function ( e, dt, node, config ) {
+						exportFormat =  exportFormats[1].id;
+						parseData();
+					}
+				},
+				{
+					text: exportFormats[2].shortDesc,
+					action: function ( e, dt, node, config ) {
+						exportFormat =  exportFormats[2].id;
+						parseData();
+						}
+				},
+				{
+					extend: 'collection',
+					text: 'Print/Copy/Export',
+					buttons: [ 
+						 {
+							extend: 'print',
+							exportOptions: {
+								columns: ':visible'
+							}
+						}, {
+							extend: 'copy',
+							exportOptions: {
+								columns: ':visible'
+							}
+						}, {
+							extend: 'pdf',
+							filename: 'inbox',
+							exportOptions: {
+								columns: ':visible'
+							}	
+						}, {
+							extend: 'excel',
+							filename: 'inbox',
+							exportOptions: {
+								columns: ':visible'
+							}	
+						}, {
+							extend: 'csv',
+							filename: 'inbox',
+							exportOptions: {
+								columns: ':visible'
+							}	
+						}						
+					],
+					autoClose: true
+				}
+			]
+		
+			if (debugShowObject) console.log(dataSetTable);		
+			if (debugShowObject) console.log(formattedTableHeader);		
+			if (debugShowObject) console.log(defaultShow);		
+			if (debugShowObject) console.log(defaultOrderBy);		
+			if (debugShowObject) console.log(selectValue);		
+			if (debugShowObject) console.log(showButtons);		
+			if (debugShowObject) console.log(dataSetTableSection);		
+		
+			sectionTables[dataSetSectionId].events = $('#events');
+			$(document).ready(function() {
+				sectionTables[dataSetSectionId].table = $('#'+ dataSetTableSection).DataTable( {
+					data: dataSetTable,
+					columns: formattedTableHeader,
+					columnDefs: [
+						{ targets: defaultShow, visible: true},
+						{ targets: '_all', visible: false }
+					],
+					order: defaultOrderBy,
+					lengthMenu: [ [10, 25, 50, 100, 200, 500, -1], [10, 25, 50, 100, 200, 500, "All"] ],
+					select: selectValue, 
+					dom: 'Bfrtip',
+					buttons: showButtons
+					
+				} );
+			} );
+		}
+	
+	}
+}	//parseData
+
+
+
+if (debug) console.log('debug 99');	
+});
+</script>	
+<style>
+
+/*********************************************************************
+****   Page-wide   ***************************************************
+*********************************************************************/
+body {
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    background-color: rgb(173, 208, 215);
+}
+#innerBody {
+    margin: 20px;
+    padding: 5px 20px 30px 20px;
+    background-color: rgb(242, 242, 230);
+}
+#loading {
+    margin-right: 30px;
+    margin-left: 30px;
+    color: orange;
+    font-size: 1.5em;
+    font-weight: bold;
+}
+#loading ul {
+    font-size: 0.8em;
+}
+#loading ul a {
+    color: orange;
+}
+
+
+.narrowContent {      /* The data should be as wide as the user's window   */
+    max-width: 500px; /* but some explanatory paragraphs should be narrow. */
+}
+
+
+hr {
+    width: 95%;
+}
+hr.padded {
+    margin-top:    1em;
+    margin-bottom: 2em;
+}
+
+.show {
+    display: block;
+}
+.hide {
+    display: none;
+}
+.clear {
+    clear: both;
+}
+
+.subheading {
+    font-weight: bold;
+}
+.highlight {
+    font-weight: bold;
+}
+.lowlight { /* like highlight but less so */
+    font-style: italic;
+}
+.explanation {
+    font-style: italic;
+}
+abbr {
+    border-bottom: 1px dashed black;
+}
+img.emoji {
+    margin-bottom: -0.25em;
+}
+.forCopyPaste {
+    /* used to add blank lines that we want when copying text to clipboard,
+       but we don't want to see extra whitespace on the screen */
+    margin-top: -1em;
+}
+ul.padded > li {
+    padding: 3px 0;
+}
+
+.neutral {
+    background-color: #fffbd0; /* yellow */
+}
+.danger {
+    background-color: #ffcccc; /* red */
+    /* background-color: #F5A9A9; */ /* darker red */
+}
+.safe {
+    background-color: #bdd8fc; /* blue */
+    /* green+red and green+yellow are not good for colour-blind people */
+}
+
+/*********************************************************************
+****   Page-wide Data Tables   ********************************
+*********************************************************************/
+a.dt-button.columnGroup {
+        color: orange;
+    }
+ 
+    
+/*********************************************************************
+****   Page-wide Show/Hide Toggling   ********************************
+*********************************************************************/
+.mainSectionClose,
+.showHideToggle,     /* for toggling by id */
+.showHideToggleClass /* for toggling by class */
+{
+    cursor: pointer;
+    text-decoration: underline;
+    color: purple;
+}
+.closer { /* as in "a thing that closes", not "nearer" */
+    margin-top: 30px;
+    padding-top: 15px;
+    padding-bottom: 15px;
+}
+.closer:hover {
+    border: 1px dashed lightgrey;
+}
+.developerData {
+    font-family: monospace;
+}
+
+
+/*********************************************************************
+****   Header   ******************************************************
+*********************************************************************/
+h1 {
+    float: left;
+}
+h1>a:first-child { /* "Habitica" link in header */
+    color: black;
+    text-decoration: none;
+}
+h1>a:first-child:hover { /* "Habitica" link in header */
+    text-decoration: underline;
+}
+h1 span {
+    font-size: 0.5em;
+}
+h2 {
+    margin-top: 30px;
+}
+
+#headerExtras .showHideToggle {
+    white-space: nowrap;
+}
+#userNameDisplay {
+    text-align: right;
+    font-weight: bold;
+    font-size: 2em;
+    margin-bottom: 10px;
+}
+
+#explanationAndClearLinks {
+    text-align: right;
+}
+#explanationAndClearLinks span {
+    padding-left: 10px;
+}
+
+
+/*********************************************************************
+****   Version History   *********************************************
+*********************************************************************/
+
+#versionChanges dl {
+    margin-left: 30px;
+}
+#versionChanges dl dt {
+    font-size: 1.15em;
+    font-weight: bold;
+}
+#versionChanges dl dt .date {
+    padding-left: 10px;
+    font-size: 0.8em;
+    font-weight: normal;
+}
+#versionChanges .showHideToggle {
+    padding-bottom: 15px;
+    margin-bottom: 10px;
+}
+/*********************************************************************
+****   Header Export Options  *********************************************
+*********************************************************************/
+#headerExport div {
+	display: inline;
+	align-items: center;
+	text-align: center;
+	padding: 5px;
+	position: relative;
+}
+
+#exportCSVFile input {
+	align-items: center;
+	text-align: center;
+	
+}
+#exportTabDelimFile input {
+	align-items: center;
+	text-align: center;
+} 
+
+
+/*********************************************************************
+****   API Form and Documentation   **********************************
+*********************************************************************/
+
+#documentationAndForm > div {
+    max-width: 700px;
+}
+#documentationAndForm #documentationAndFormClose {
+    display: none;
+    max-width: 100%;
+}
+#documentationAndForm div h2 {
+    font-size: 1.3em;
+}
+#documentationAndForm li {
+    margin-bottom: 10px;
+}
+
+#userApiDetailsForm {
+    margin: 30px;
+}
+#userApiDetailsForm fieldset {
+    max-width: 40em;
+}
+#userApiDetailsForm fieldset label,
+#userApiDetailsForm fieldset input[type="submit"] {
+    display: block;
+    float: left;
+    clear: left;
+    margin: 10px 0;
+}
+#userApiDetailsForm fieldset label span {
+    display: block;
+    float: left;
+    width: 8em;
+}
+#userApiDetailsForm fieldset label input {
+    float: left;
+    width: 30em;
+}
+#userApiDetailsForm fieldset p {
+    clear: both;
+}
+#userApiDetailsForm legend .highlight {
+    font-size: 1.3em;
+}
+#userApiDetailsForm fieldset li {
+    margin-bottom: 7px;
+}
+
+
+
+/*********************************************************************
+****   Dashboard   ***************************************************
+*********************************************************************/
+
+
+/*********************************************************************
+****   Table Of Contents   *******************************************
+*********************************************************************/
+
+
+/*********************************************************************
+****   Specific Sections   *******************************************
+*********************************************************************/
+#displayInboxSection h3 {
+    margin-top: 2em;
+}
+
+</style>
+</head>
+<body><div id="innerBody">	
+<h1><a href="https://habitica.com/">Habitica</a> Inbox Display & Export Tool
+    <span class="showHideToggle" data-target="versionChanges" data-closemainsections="true">(v1.4)</span></h1><!-- VERSION TOGGLE -->
+<div id="headerExtras"></div>
+<hr class="clear" />
+
+<!--
+<p style="font-size:18px; color:orange"><strong>If you are unable to use Habitica, please try with this alternative URL: <a href="https://habitrpg.herokuapp.com/">https://habitrpg.herokuapp.com/</a></strong></p>
+
+<p><i>The usual website is down because the Domain Registrar company that we use is having problems.</i></p>
+<hr class="clear" />
+-->
+
+<div id="loading">
+    <div class="good hide">
+        <p>Please wait. Fetching data from
+        <span id="serverName">Habitica</span>...</p>
+    </div>
+    <div class="bad hide">
+        <p>There was an error obtaining your data.</p>
+        <ul class="padded">
+            <li>Please reload the page and then check that your <a href="https://habitica.com/#/options/settings/api">User ID and API Token</a> are correct.</li>
+            <li>If you're using Internet Explorer, try another browser. <a href="https://www.google.com/intl/en/chrome/browser/">Chrome</a> or <a href="https://www.mozilla.org/en-US/firefox/new/">Firefox</a> will be more reliable.</li>
+            <li>If the page's URL starts with "http://" change it to start with "https://" (or just use <a href="https://oldgods.net/habitrpg/habitrpg_user_data_display.html">this correct link</a>).</li>
+            <li>If neither of those help, contact me! See <strong>"Help and Contact Details"</strong> at the bottom of this page.</li>
+        </ul>
+    </div>
+</div>
+
+<div id="versionChanges" class="hide"><!-- VERSION SECTION -->
+    <h2>Version History</h2>
+    <dl>
+	    <dt>1.4 - That is where that typo went! <span class="date">2016-12-05</span></dt>
+        <dd><ul>
+            <li>Documentation:
+                <ul>
+                    <li>Fixing text regarding Warm Porriage (Thank you @Floodid & @CloJo)</li>
+				</ul>
+            </li>
+		</ul></dd>
+       <dt>1.3 - More export and columns selections. Making Firefox compatible <span class="date">2016-11-16</span></dt>
+        <dd><ul>
+            <li>Features:
+                <ul>
+                    <li>Upgrade to select / deselect all columns</li>
+					<li>Added Print, copy and export to excel options</li>
+					<li>Retired TAB format to remain compatible with firefox.</li>
+				</ul>
+            </li>
+		</ul></dd>
+        <dt>1.2 - Mark Inbox as Read <span class="date">2016-11-02</span></dt>
+        <dd><ul>
+            <li>Features:
+                <ul>
+                    <li>Giving the option to mark item as read</li>
+				</ul>
+            </li>
+		</ul></dd>
+		<dt>1.1 - Serving Porridge <span class="date">2016-10-15</span></dt>
+        <dd><ul>
+            <li>Features:
+                <ul>
+                    <li class="subheading">Created Porriage options</li>
+					<li>Allowed text to be rendered in Habitica Markup format</li>
+					<li>Create format that removed all html tags</li>
+                    <li>Moved Export bar to Main area</li>
+					<li>Sources moved to external documents</li>
+                </ul>
+            </li>
+		</ul></dd>
+        <dt>1.0 - initial release <span class="date">2016-10-12</span></dt>
+        <dd><ul>
+            <li>Features:
+                <ul>
+                    <li class="subheading">Inbox Data Listing in Table Format</li>
+					<li class="subheading">Export of Inbox in CSV format</li>
+                    <li class="subheading">Export of Inbox in Tab Delimited format</li>
+                </ul>
+            </li>
+            <li>Documentation:
+                <ul>
+                    <li>Privacy and security notes (also related comments within the code)</li>
+                    <li>What's On This Page? (descriptions of each feature)</li>
+                    <li>Possible Future Features</li>
+                    <li>Suspected Bugs (no support for old browsers; mobile support unknown)</li>
+                    <li>Help and Contact Details</li>
+                </ul>
+            </li>
+        </ul></dd>
+    </dl>
+    <div class="showHideToggle closer" data-target="versionChanges" data-scrolltotop="true">close version history <span class="lowlight">(or click the version number again to close)</span></div>
+    <hr />
+</div><!-- end of div id="versionChanges" -->
+
+
+<div id="DASHBOARD"></div>
+<div id="TOC"></div>
+<div id="MAIN"></div>
+
+
+<div id="documentationAndForm">
+   <p>This page shows you certain information from your <a
+   href="https://habitica.com/">Habitica</a> account. You can read the
+   full list below, or just enter your details and try it out.</p>
+
+    <iframe src="null.htm" id="formPasswdSaveFix" name="formPasswdSaveFix" style="display:none"></iframe><!-- DAMN YOU CHROME!! DAMN YOU!!!! http://stackoverflow.com/a/9116737 -->
+    <form id="userApiDetailsForm" method="POST" action="" target="formPasswdSaveFix">
+        <fieldset>
+            <legend><span class="highlight">Enter your Habitica API details</span>
+            (from the <a href="https://habitica.com/#/options/settings/api">Settings
+             -&gt; API page</a>)
+            </legend>
+            <label for="userId"><span>User ID</span>
+                <input type="text" name="userId" id="userId" />
+            </label>
+            <label for="apiToken"><span>API Token</span>
+                <input type="password" name="apiToken" id="apiToken" />
+            </label>
+			<label for="markReadOption"><span>Clear Message Notification?</span>
+                <input type="checkbox" name="markReadOption" id="markReadOption" checked/>
+            </label>
+			<div id="exportOptionSelector"></div>
+            <input type="submit" value="Fetch My Inbox Data" />
+			<div id="exportOptionDesc"></div>
+            <p class="highlight">Privacy and security notes:</p>
+            <ul>
+            <!--<li>If you access this page from the Data menu on the Habitica
+            website, your User ID will be automatically added to the form
+            above.</li> $$$ Maybe one day when the tool is that good--->
+            <li>Your API Token is a password - do not share it with anyone,
+            not even the maintainer of this page if you are seeking help.</li>
+            <li>When you enter your User ID and API Token here and click
+            "Fetch My Data", your ID and Token are sent to Habitica's servers.
+            They are not sent anywhere else.
+            To confirm that, you can ask someone who knows the JavaScript
+            programming language to examine the source of this page.</li>
+            <li>This page does not save your User ID and API Token to any
+            location, but your browser might, if it has been configured to
+            save form and password information. If you are using this page
+            on a shared computer, you should clear any data that the browser
+            has saved.</li>
+            <li>You cannot view anyone else's private data by using this page.</li>
+            <li>To clear your data, reload the page.</li>
+            </ul>
+        </fieldset>
+    </form>
+
+
+    <div>
+       <h2>What's On This Page?</h2>
+       <ul>
+            <li><span class="subheading">Inbox Listing Table Format</span>: A table listing personal messages with option to Export to CSV or Tab Delimited Format</li>
+       </ul>
+
+	<h2>Possible Future Features</h2>
+       <ul>
+            <li>Delete bulk delete messages?</li>
+			<li>Clean up of my code. It's ugly at the moment. Too much hacking not enough growing.</li>
+		<li><span class="subheading">Other Stuff?</span>: Send me ideas! Contact details are below.</li>
+       </ul>
+
+       <h2>Known Bugs</h2>
+	   <p>The hiding and closing of sections is a bit funky. One day I will fix it but not today.</p>
+       <p>Internet Explorer will produce odd results if you use the "Re-Fetch Data" button. Reloading the page will fix the problem. Avoid using that button. Avoiding Internet Explorer will also work.</p>
+       <p>This page will not work correctly on old browsers because it uses modern website features and relies on compliance to standards (both can be lacking in old browsers). <a href="http://browsehappy.com/">Updating your browser is important for general safety on the internet!</a> If you have upgraded your browser to the latest version and are still having problems, please tell me! Contact details are below.</p>
+       <p>Regardless of what bugs there might be, this page cannot damage your account. It does not contain any code that could result in any changes being made on Habitica except marking your inbox messages as read.</p>
+
+	   <h2>Thank You!</h2>
+	   <p>Thank you to @Alys & Ryan for their code which this is based. Thank you all in the <a href="https://habitica.com/#/options/groups/guilds/349a36c3-66f3-4bf8-91b6-475056d9b6bb">Javascript</a> and <a href="https://habitica.com/#/options/groups/guilds/2ff9822b-27f2-4774-98da-db349b57a38e">Aspiring Comrades</a> in answering my newbie questions.<p> 
+	   
+       <h2>Help and Contact Details</h2>
+		<p>This page has been created by <a href="http://habitica.wikia.com/wiki/User:CTheDragons">cTheDragons</a>. If you have questions, problems, or suggestions, you're welcome to contact me, although I cannot guarantee that I'll always be able to spend a lot of time on this. You can contact me at <a href="https://habitica.com/#/options/groups/guilds/d9a0ec1e-352b-4697-a5d5-fb45c98fb4a3">Testing & Bug Squashing for Dragon Tools</a>. I tend to ignore emails & PMs.</p>
+
+        <p>If you have general questions about Habitica, post them to <a href="https://habitica.com/#/options/groups/tavern">Tavern Talk</a>, <a href="https://habitica.com/#/options/groups/guilds/5481ccf3-5d2d-48a9-a871-70a7380cee5a">The Newbies Guild</a> or <a href="http://habitica.wikia.com/wiki/Board:The_Quarters_-_Q_%26_A">The Quarters - Q & A board</a>.</p>
+    </div>
+	
+	<div id="documentationAndFormClose" class="showHideToggle closer" data-target="documentationAndForm" data-resettoggletext="documentationAndFormToggle">hide documentation</div>
+	
+</div><!-- end of div id="documentationAndForm" -->
+	
+</div><!-- end of div id="innerBody" -->
+</body>
+</html>	
