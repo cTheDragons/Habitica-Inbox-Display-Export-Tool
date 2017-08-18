@@ -13,8 +13,7 @@ This code is licensed under the same terms as Habitica:
 
 https://github.com/Alys/tools-for-habitrpg/blob/master/habitrpg_user_data_display.html
 
-https://oldgods.net/habitrpg/habitrpg_user_data_display.html
-    or http://is.gd/hrpguserdata
+https://oldgods.net/habitica/cTheDragons/inbox.html
 
 Contributors:
     cTheDragons https://github.com/cTheDragons
@@ -71,15 +70,15 @@ sectionTables['displayInboxSection'] = {
 
 
 var exportOptions = [
-					{id: 'babyBear', shortDesc: 'Baby Bear', longDesc: 'Displays & exports UserId, User, Posted, Sent, Text'},
-					{id: 'mamaBear', shortDesc: 'Mama Bear', longDesc: 'Displays & exports UserId, User, Tier, Contributor, Posted, Sent, Text'},
-					{id: 'papaBear', shortDesc: 'Papa Bear', longDesc: 'Displays & exports UserId, User, Tier, Contributor, Contributor Contributions, Admin, Posted, Epoch, Sent, Text'}
-					];
+	{id: 'babyBear', shortDesc: 'Baby Bear', longDesc: 'Displays & exports UserId, User, Posted, Sent, Text'},
+	{id: 'mamaBear', shortDesc: 'Mama Bear', longDesc: 'Displays & exports UserId, User, Tier, Contributor, Posted, Sent, Text'},
+	{id: 'papaBear', shortDesc: 'Papa Bear', longDesc: 'Displays & exports UserId, User, Tier, Contributor, Contributor Contributions, Admin, Posted, Epoch, Sent, Text'}
+];
 var exportFormats = [
-					{id: 0, shortDesc: 'Warm Porridge', longDesc: 'Displays & exports with Emoji & Text converted but HTML removed', convertMarkup: true, removeHtml: true},
-					{id: 1, shortDesc: 'Hot Porridge', longDesc: 'Displays & exports in exact Habitica HTML format', convertMarkup: true, removeHtml: false},
-					{id: 2, shortDesc: 'Cold Porridge', longDesc: 'Displays & exports in raw format', convertMarkup: false, removeHtml: false}
-					];
+	{id: 0, shortDesc: 'Warm Porridge', longDesc: 'Displays & exports with Emoji & Text converted but HTML removed', convertMarkup: true, removeHtml: true, convertLineBreaks: false},
+	{id: 1, shortDesc: 'Hot Porridge', longDesc: 'Displays & exports in exact Habitica HTML format', convertMarkup: true, removeHtml: false, convertLineBreaks: false},
+	{id: 2, shortDesc: 'Cold Porridge', longDesc: 'Displays & exports in raw format', convertMarkup: false, removeHtml: false, convertLineBreaks: true}
+];
 					
 //////////////////////////////////////////////////////////////////////
 ////   Global Connection Variables      //////////////////////////////
@@ -545,9 +544,18 @@ function parseData() {
 	
 	function renderFormattedText(text, options) {
 		var md = window.habiticaMarkdown;
-		//$$$ move this out as options
-		if (exportFormats[exportFormat].convertMarkup) text = md.render(text);
-		if (exportFormats[exportFormat].removeHtml) text = $(text).text();
+		if (text != undefined) {
+			if (exportFormats[exportFormat].convertMarkup) text = md.render(text);
+			if (exportFormats[exportFormat].removeHtml) text = $(text).text();
+			if (exportFormats[exportFormat].convertLineBreaks) text = text.replace(/(?:\r\n|\r|\n)/g, '<br />');
+			if (options && options.removeParaTags) {
+				text = String(text).replace(/^<p>|<\/p>\n$/g, '');
+			}
+			else if (options && options.setParaClass) {
+				text = String(text).replace(/<p>/g,
+						   '<p class="' + options.setParaClass + '">');
+			}
+		}
 		return text;
 	}
 	
@@ -1104,7 +1112,7 @@ h2 {
 </head>
 <body><div id="innerBody">	
 <h1><a href="https://habitica.com/">Habitica</a> Inbox Display & Export Tool
-    <span class="showHideToggle" data-target="versionChanges" data-closemainsections="true">(v1.6)</span></h1><!-- VERSION TOGGLE -->
+    <span class="showHideToggle" data-target="versionChanges" data-closemainsections="true">(v1.7)</span></h1><!-- VERSION TOGGLE -->
 <div id="headerExtras"></div>
 <hr class="clear" />
 
@@ -1125,7 +1133,7 @@ h2 {
         <ul class="padded">
             <li>Please reload the page and then check that your <a href="https://habitica.com/#/options/settings/api">User ID and API Token</a> are correct.</li>
             <li>If you're using Internet Explorer, try another browser. <a href="https://www.google.com/intl/en/chrome/browser/">Chrome</a> or <a href="https://www.mozilla.org/en-US/firefox/new/">Firefox</a> will be more reliable.</li>
-            <li>If the page's URL starts with "http://" change it to start with "https://" (or just use <a href="https://oldgods.net/habitrpg/habitrpg_user_data_display.html">this correct link</a>).</li>
+            <li>If the page's URL starts with "http://" change it to start with "https://" (or just use <a href="https://oldgods.net/habitica/cTheDragons/inbox.html">this correct link</a>).</li>
             <li>If neither of those help, contact me! See <strong>"Help and Contact Details"</strong> at the bottom of this page.</li>
         </ul>
     </div>
@@ -1134,7 +1142,22 @@ h2 {
 <div id="versionChanges" class="hide"><!-- VERSION SECTION -->
     <h2>Version History</h2>
     <dl>
-		<dt>1.6 - Minor Rearrange<span class="date">2016-01-16</span></dt>
+		<dt>1.7 - Nothing Flash But Nice To Know<span class="date">2017-08-19</span></dt>
+        <dd><ul>
+            <li>Features:
+                <ul>
+					<li>Names now render with markdown based on porridge option.</li>
+				</ul> 
+            </li>
+	        <li>Bug Fixes:
+                <ul>
+                    <li>Removed incorrect references to the Data Display Tool. (Thank you @Alys)</li>
+					<li>Cold porridge now shows carriage returns.</li>
+					<li>Better handling of null strings with markdown</li>
+               </ul>
+            </li>
+		</ul></dd>	
+		<dt>1.6 - Minor Rearrange<span class="date">2017-01-16</span></dt>
         <dd><ul>
             <li>Documentation Code
                 <ul>
@@ -1276,6 +1299,7 @@ h2 {
 	<h2>Possible Future Features</h2>
        <ul>
             <li>Delete bulk delete messages?</li>
+			<li>Keeps settings when refetch.</li>
 			<li>Clean up of my code. It's ugly at the moment. Too much hacking not enough growing.</li>
 		<li><span class="subheading">Other Stuff?</span>: Send me ideas! Contact details are below.</li>
        </ul>
@@ -1293,7 +1317,7 @@ h2 {
 		<p>This page has been created by <a href="http://habitica.wikia.com/wiki/User:CTheDragons">cTheDragons</a>. If you have questions, problems, or suggestions, you're welcome to contact me, although I cannot guarantee that I'll always be able to spend a lot of time on this. You can contact me at <a href="https://habitica.com/#/options/groups/guilds/d9a0ec1e-352b-4697-a5d5-fb45c98fb4a3">Testing & Bug Squashing for Dragon Tools</a>. I tend to ignore emails & PMs.</p>
 	    <p>Code can be source at  <a href="https://github.com/cTheDragons/Habitica-Inbox-Display-Export-Tool">Github<a>. Contributions are welcome. As already stated, any issues please report to  <a href="https://habitica.com/#/options/groups/guilds/d9a0ec1e-352b-4697-a5d5-fb45c98fb4a3">Testing & Bug Squashing for Dragon Tools</a> for a faster response and to avoid duplication. </p>
 
-        <p>If you have general questions about Habitica, post them to <a href="https://habitica.com/#/options/groups/tavern">Tavern Talk</a>, <a href="https://habitica.com/#/options/groups/guilds/5481ccf3-5d2d-48a9-a871-70a7380cee5a">The Newbies Guild</a> or <a href="http://habitica.wikia.com/wiki/Board:The_Quarters_-_Q_%26_A">The Quarters - Q & A board</a>.</p>
+        <p>If you have general questions about Habitica, post them to <a href="https://habitica.com/#/options/groups/tavern">Tavern</a> or <a href="https://habitica.com/#/options/groups/guilds/5481ccf3-5d2d-48a9-a871-70a7380cee5a">Habitica Help: Ask a Question Guild</a>.</p>
     </div>
 	
 	<div id="documentationAndFormClose" class="showHideToggle closer" data-target="documentationAndForm" data-resettoggletext="documentationAndFormToggle">hide documentation</div>
