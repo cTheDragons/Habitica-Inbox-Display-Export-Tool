@@ -28,8 +28,6 @@ Contributors:
 
 -->
 
-
-
     <meta name="description" content="Inbox Display & Export Tool" />
     <meta name="author" content="cTheDragons" />
 
@@ -52,19 +50,47 @@ $(function() { // wraps around all our code to not pollute global namespace
 var content;  // holds site-wide content (gear names and stats, quests, etc)
 var user;     // holds user's data
 
+
+//////////////////////////////////////////////////////////////////////
+////   Global Constants                              /////////////////
+//////////////////////////////////////////////////////////////////////
+var DOUBLEQUOTES = 		'"' //This is to make my life easier... 
+var SECTIONREFRESH = 	"SectionRefresh"
+
+
+
+//////////////////////////////////////////////////////////////////////
+////   Sections                              /////////////////
+//////////////////////////////////////////////////////////////////////
+
+		// TO ADD NEW SECTION: To create a Table of Content entry and Main,
+		// add the unique identifier for the new section to array section to Display. 
+		// If it is a section that displays table content update sectionTables too. 
+		// If new content is required see formatAllDataAndCollate() 
+		
+		//If custom sections required add to below the Sections data... (Not there yet)
+
+var sectionsToDisplay = [	
+	{type: 'sectionTable', id: 'displayInboxSection', title: 'PMs', showOnly: [], description: 'Displays personal messages you have exchanged with guild members you have fetched.'}
+]
+
 var sectionTables =	[]
 sectionTables['displayInboxSection'] = {
 	type: 'inbox',
 	dataSet: [], 
-	dataSetHeader: ['User Id', 'User', 'Tier', 'Contributor', 'Contributor Contributions', 'Admin', 'Posted', 'Epoch', 'Sent', 'Text'],
-	dataTable: ['uuid', 'userPretty', 'contribPretty.level', 'contribPretty.text', 'contribPretty.contributions', 'contribPretty.admin', 'creation.shortDate', 'timestamp', 'sentPretty', 'textPretty'],
-	babyBear: {show: [0,1,6,8,9], orderBy: [[6, 'desc']]},
-	mamaBear: {show: [0,1,2,3,6,8,9], orderBy: [[6, 'desc']]},
-	papaBear: {show: ['all'], orderBy: [[7, 'desc']]},
+	dataSetHeader: ['User Id', 'User', 'Tier', 'Contributor', 'Contributions', 'Mod', 'Posted', 'Epoch', 'Sent', 'Text', 'Message Id'],
+	dataTable: ['uuid', 'userNotPretty', 'contribPretty.level', 'contribPretty.text', 'contribPretty.contributions', 'contribPretty.admin', 'creation.shortDate', 'timestamp', 'sentPretty', 'textPretty', 'id'],
+	babyBear: {show: [1,6,8,9], orderBy: [[6, 'desc']]},
+	mamaBear: {show: [1,2,3,6,8,9], orderBy: [[6, 'desc']]},
+	papaBear: {show: ['all'], orderBy: [[6, 'desc']]},
+	extraColumnDefs: [{'className': 'dt-center', 'targets': [5,8]}, {'className': 'dt-right', 'targets': [2,6,7]}],
 	subTitle: function (){
 		var html = ''
 		return html 
-	}
+	},
+	pmidIndex: 10,
+	uuidIndex: 0,
+	nameIndex: 1
 }
 
 
@@ -83,11 +109,25 @@ var exportFormats = [
 //////////////////////////////////////////////////////////////////////
 ////   Global Connection Variables      //////////////////////////////
 //////////////////////////////////////////////////////////////////////
+var warningMessage			= 	'PLEASE ENSURE YOUR MESSAGE IS:\n' +
+								'\n\u2022 is respectful, supportive and courteous;' + 
+								'\n\u2022 is not spam, including unwanted advertisements of products, social media accounts, etc;' +
+								'\n\u2022 is not begging for a gift of gems or a subscription' +
+								'\n\u2022 meets all requirements of the Community Guidelines of Habitica (https://habitica.com/static/community-guidelines). ' +
+								'\n\u2022 meets all requirements of the Term of Service of Habitica (https://habitica.com/static/terms). ' +
+								'\n' +
+								'\nFailure to do so can lead to minor consequences (like warnings) to severe consequences including account bans & deletions.' +
+								'\n' +
+								'\nIf you have any concerns, please email Lemoness (leslie@habitica.com) for clarification.'
+
 var serverName               = 'Habitica'; // used in "loading" message
 var serverUrl                = 'https://habitica.com/api/v3';
 var serverPathContent        = '/content?language=en';
 var serverPathUser           = '/user';
 var serverPathMarkRead		 = '/user/mark-pms-read'
+var serverPathMessageUser	 = '/members/send-private-message'
+var serverPathInbox			 = '/user/messages'	
+
 var userId                   = '';
 var apiToken                 = '';
 var markReadOption	 		 = '';
@@ -96,12 +136,17 @@ var exportFormat			 = 0;
 var debug                    = false;
 var debugShowObject          = false;
 
+
+if (debug || debugShowObject) serverName = '*** TURN DEBUG OFF! *** - ' + serverName
 if (debug) console.log('debug 1');
 
 var sectionOpen = ''; // holds the ID attribute of a section of the page;
                       // persists through re-fetch of data so we can
                       // reopen that section when the new data arrives
 var tellMe = '<a href="https://github.com/cTheDragons">tell me</a>';
+
+var neverDate = '1900-01-01'
+var notAvailableMember = '-Member Not In Listed-'
 
 //////////////////////////////////////////////////////////////////////
 ////   Allow Show/Hide Toggling to work    ///////////////////////////
@@ -211,8 +256,24 @@ if (debug) console.log('debug enableShowHideToggling');
 ////   Get UUID from URL      ////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////
 var url_vars = getUrlVars();
-if (url_vars.uuid) {
-    $("#userId").val(url_vars.uuid);
+if (url_vars.uuid || url_vars.userId) {
+	if (url_vars.userId) {
+		$("#userId").val(url_vars.userId);
+	} else {
+		$("#userId").val(url_vars.uuid);
+	}	
+
+	if (url_vars.mark_read) {
+		$("#markReadOption").prop("checked", true);
+	} else {
+		$("#markReadOption").prop("checked", false);
+	}
+
+	if (url_vars.hide_avatar) {
+		$("#hideAvatar").prop("checked", true);
+	} else {
+		$("#hideAvatar").prop("checked", false);
+	}	
 }
 function getUrlVars() {
     // Function found at http://stackoverflow.com/questions/4656843/jquery-get-querystring-from-url#answer-4656873
@@ -307,6 +368,326 @@ function fetchData() {
     }
 }
 
+
+
+//////////////////////////////////////////////////////////////////////
+////  Post functions      //////////////////////////////
+//////////////////////////////////////////////////////////////////////
+// All post functions are implemented serial as they are unreliable when performed in parallel.
+
+
+//////////////////////////////////////////////////////////////////////
+////  Delete All  Message			    //////////////////////////////
+//////////////////////////////////////////////////////////////////////
+function postDeleteAllMessages() {
+	if (debug) console.log('debug postDeleteAllMessages start');
+	if (confirm('Do you wish to delete all your messages from your Inbox?\n\nThere is no undo!')){
+		postNextDeleteAllMessages()
+	} else {
+		alert('Action cancelled')
+		return;
+	}
+	
+
+	//This is done like this as receive ERR_INCOMPLETE_CHUNKED_ENCODING
+	function postNextDeleteAllMessages(){
+		$('#posting .good').show();
+		
+		urlToPost = serverUrl + serverPathInbox 
+		if (debugShowObject) console.log(urlToPost);
+		$('#posting #statusPost').text('Deleting all messages' );
+		$.ajax({
+			url: urlToPost,
+			type: 'DELETE',
+			contentType: 'application/json',
+			dataType: 'json',
+			cache: false,
+			beforeSend: function(xhr){
+					xhr.setRequestHeader('x-api-user', userId);
+					xhr.setRequestHeader('x-api-key',  apiToken);
+				},
+			success: postDeleteAllMessagesSuccess,
+			error: postDeleteAllMessagesFailure
+		});		
+	}
+		
+
+	
+	function postDeleteAllMessagesFailure(data){
+		if (debug) console.log('debug postDeleteAllMessagesFailure start');
+		if (debugShowObject) console.log(data);
+		var errData = data;
+		alert('ERROR WITH Delete All Messages \n\n' + errData.responseJSON.error + '\n' + errData.responseJSON.message  + '\n\nPlease refetch your data and try again.');	
+				
+		fetchData()
+	}
+
+
+	function postDeleteAllMessagesSuccess(data){
+		if (debug) console.log('debug postDeleteAllMessagesSuccess start');
+		if (debugShowObject) console.log(data);
+		alert('All messages are deleted.\n\nYour data will now be refreshed.')
+		
+		fetchData() 
+	}
+	
+
+}
+
+
+//////////////////////////////////////////////////////////////////////
+////  Delete PM Message			    //////////////////////////////
+//////////////////////////////////////////////////////////////////////
+function postDeleteMessage(rowData, pmidIndex, nameIndex) {
+	if (debug) console.log('debug postDeleteMessage start');
+	if (debugShowObject) console.log(rowData)
+	var urlToPost = ''	
+	var actionNotificationList = ''
+	var index = 0
+	var loopList = []
+	
+	if (rowData.length == 0){
+		if (debug) console.log('debug no users to remove');
+		alert('No row selected.\nPlease select a row before trying again.');
+		return;
+	
+	} else {
+		if (debugShowObject) console.log( rowData );
+
+		//get UniqueRows
+		for(var i = 0; i < rowData.length; i++) {
+			notInLoop = true
+			
+			for(var j = 0; j < loopList.length; j++) {
+				if (rowData[i][pmidIndex] == loopList[j][pmidIndex]) {
+					notInLoop = false
+					break;
+				}				
+			}
+			
+			if (notInLoop) {
+				loopList.push(rowData[i])
+			}
+		}
+		
+		for(var i = 0; i < loopList.length; i++)
+		{
+			actionNotificationList += '\n\u2022  '  + loopList[i][pmidIndex] + ' (From: ' + loopList[i][nameIndex] + ')'  
+		}
+		
+
+		if (confirm('Are you sure you wish to delete the following messages?' + actionNotificationList + '\n\nThere is no undo!')){
+			actionNotificationList = ''
+			postNextDeleteMessage()
+		} else {
+			alert('Action cancelled')
+			return;
+		}
+	}
+	
+	//This is done like this as to avoid ERR_INCOMPLETE_CHUNKED_ENCODING
+	function postNextDeleteMessage(){
+		$('#posting .good').show();
+		
+		obj = loopList[index]
+		urlToPost = serverUrl + serverPathInbox + '/' + obj[pmidIndex] 
+		$('#posting #statusPost').text('Deleting message: ' + obj[pmidIndex] + ' (From: ' + obj[nameIndex] + ')' );
+		if (debugShowObject) console.log(urlToPost);
+		$.ajax({
+			url: urlToPost,
+			type: 'DELETE',
+			dataType: 'json',
+			cache: false,
+			beforeSend: function(xhr){
+					xhr.setRequestHeader('x-api-user', userId);
+					xhr.setRequestHeader('x-api-key',  apiToken);
+				},
+			success: postDeleteMessageSuccess,
+			error: postDeleteMessageFailure
+		});		
+	}
+		
+
+	
+	function postDeleteMessageFailure(UserNotFound){
+		if (debug) console.log('debug postDeleteMessageFailure start');
+		if (debugShowObject) console.log(UserNotFound);
+		var errData = UserNotFound;
+		alert('ERROR WITH  ' +  obj[pmidIndex] + '\n\n' + errData.responseJSON.error + '\n' + errData.responseJSON.message  + '\n\nPlease refetch your data and try again.');	
+		index++
+		
+		postDeleteMessageCheckCompleted()
+	}
+
+
+	function postDeleteMessageSuccess(data){
+		if (debug) console.log('debug postDeleteMessageSucess start');
+		$('#posting #statusPost').text('Succesfully deleted the following message: ' + obj[pmidIndex] + ' (From: ' + obj[nameIndex] + ')' );
+		if (debugShowObject) console.log(data);
+		actionNotificationList += '\n\u2022  ' + obj[pmidIndex] + ' (From: ' + obj[nameIndex] + ')' 
+		index++
+		
+		postDeleteMessageCheckCompleted()
+	}
+	
+	function postDeleteMessageCheckCompleted(){
+		if (index === loopList.length){
+			$('#posting .good').hide();
+			if (debugShowObject) console.log(actionNotificationList);
+			alert('The following messages have been deleted:' + actionNotificationList + '\n\nYour data will now be refreshed')
+			fetchData() 
+		} else
+		{
+			postNextDeleteMessage()
+		}		
+	
+	}
+}
+
+//////////////////////////////////////////////////////////////////////
+////  Post Private Message			    //////////////////////////////
+//////////////////////////////////////////////////////////////////////
+function postMessageUser(rowData, uuidIndex, nameIndex) {
+	if (debug) console.log('debug postMessageUser start');
+	if (debugShowObject) console.log(rowData)
+	var urlToPost = ''	
+	var actionNotificationList = ''
+	var index = 0
+	var privateMessage = ''
+	var loopList = []
+	
+	if (rowData.length == 0){
+		if (debug) console.log('debug no users to remove');
+		alert('No row selected.\nPlease select a row before trying again.');
+		return;
+	
+	} else {
+		if (debugShowObject) console.log( rowData );
+		//Check if message to be sent
+		var optionalMessage = 'Thank You!'
+		
+		privateMessage = prompt('Please enter your private message to be sent to the users selected:\n\n' + warningMessage, optionalMessage)
+
+		//get UniqueRows
+		for(var i = 0; i < rowData.length; i++) {
+			notInLoop = true
+			
+			for(var j = 0; j < loopList.length; j++) {
+				if (rowData[i][uuidIndex] == loopList[j][uuidIndex]) {
+					notInLoop = false
+					break;
+				}				
+			}
+			
+			if (notInLoop) {
+				loopList.push(rowData[i])
+			}
+		}
+		
+		for(var i = 0; i < loopList.length; i++)
+		{
+			actionNotificationList += '\n\u2022  ' + loopList[i][nameIndex]
+		}
+		
+		if ((privateMessage != undefined) && (privateMessage != '') && (privateMessage != null)) {
+			if (confirm('Are you sure you wish to send\n\n' + privateMessage + '\n\n to the selected users?' + actionNotificationList + '\n\nThere is no undo!')){
+				actionNotificationList = ''
+				postNextMessageUser()
+			} else {
+				alert('Action cancelled')
+				return;
+			}
+		} else {
+			alert('Action cancelled')
+			return;
+		}
+	}
+	
+	//This is done like this as to avoid ERR_INCOMPLETE_CHUNKED_ENCODING
+	function postNextMessageUser(){
+		$('#posting .good').show();
+		
+		obj = loopList[index]
+		var newData = {message: privateMessage, toUserId: obj[uuidIndex]}
+		urlToPost = serverUrl + serverPathMessageUser //+ '/' + obj[uuidIndex] + '?message=' + privateMessage
+		$('#posting #statusPost').text('Messaging ' + obj[nameIndex] );
+		if (debugShowObject) console.log(urlToPost);
+		if (debugShowObject) console.log(newData);
+		$.ajax({
+			url: urlToPost,
+			type: 'POST',
+			contentType: 'application/json',
+			data: JSON.stringify(newData),
+			dataType: 'json',
+			cache: false,
+			beforeSend: function(xhr){
+					xhr.setRequestHeader('x-api-user', userId);
+					xhr.setRequestHeader('x-api-key',  apiToken);
+				},
+			success: postMessageUserSuccess,
+			error: postMessageUserFailure
+		});		
+	}
+		
+
+	
+	function postMessageUserFailure(data){
+		if (debug) console.log('debug postMessageUserFailure start');
+		if (debugShowObject) console.log(data);
+		var errData = data;
+		alert('ERROR WITH  ' +  obj[nameIndex] + '\n\n' + errData.responseJSON.error + '\n' + errData.responseJSON.message  + '\n\nPlease refetch your data and try again.');	
+		index++
+		
+		postMessageUserCheckCompleted()
+	}
+
+
+	function postMessageUserSuccess(data){
+		if (debug) console.log('debug postMessageUserSucess start');
+		$('#posting #statusPost').text('Successfully Messaged ' + obj[nameIndex] );
+		if (debugShowObject) console.log(data);
+		actionNotificationList += '\n\u2022  ' + obj[nameIndex]  
+		index++
+		
+		postMessageUserCheckCompleted()
+	}
+	
+	function postMessageUserCheckCompleted(){
+		if (index === loopList.length){
+			$('#posting .good').hide();
+			if (debugShowObject) console.log(actionNotificationList);
+			alert('The following users have been messaged:' + actionNotificationList + '\n\nYour data will now be refreshed')
+			fetchData() 
+		} else
+		{
+			postNextMessageUser()
+		}		
+	
+	}
+}
+
+//////////////////////////////////////////////////////////////////////
+////  Post Private Message by Id	    //////////////////////////////
+//////////////////////////////////////////////////////////////////////
+function postMessageUserByUserId() {
+	var toSendUserId = ''
+
+	toSendUserId = prompt('User Id of the message to be sent to:\n\nThis is in format 00000000-0000-0000-0000-000000000000. It is not the nick of the player.' )
+	
+	if ((toSendUserId != undefined) && (toSendUserId != '') && (toSendUserId != null)) {
+		var rowData = [[toSendUserId, toSendUserId]]
+		postMessageUser(rowData, 0, 1)
+	} else {
+		alert('Action cancelled')
+		return;
+	}
+	
+}
+
+
+//////////////////////////////////////////////////////////////////////
+////  Mark PM Read					    //////////////////////////////
+//////////////////////////////////////////////////////////////////////
 function postMarkRead() {
 	// fetch the user's own content (guilds, parties):
     $.ajax({
@@ -337,55 +718,12 @@ function postMarkRead() {
     }
 }
 
-function downloadTextTable(delim, textDelim, rowDelim, replaceChar1, replaceWith1, replaceChar2, replaceWith2, fileExt) {
-	if (debug) console.log('debug downloadTextTable');	
-	//Need to change to handle multiple formats
-	
-	var fileItem = '';
-    var fileText = '';
-	var finalExportTable = []
-	//var workingExportTable = []
 
-	finalExportTable.push(exportTableHeader)
-	finalExportTable = finalExportTable.concat(exportTable)
-	
-	
-	//Prepare for global replace (Surely there should be a standard formula for this)
-	if (replaceChar1 != '') {
-		replaceChar1 = replaceChar1.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-		var re1 = new RegExp(replaceChar1, 'g');
-	}
-	
-	if (replaceChar2 != '') {
-		replaceChar2 = replaceChar1.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-		var re2 = new RegExp(replaceChar2, 'g');
-	}
-	
-	if (debugShowObject) console.log(finalExportTable);	
-	$.each(finalExportTable, function(index, obj){
-		//if (debugShowObject) console.log(obj);	
-		$.each(obj, function(index2, obj2){
-			fileItem = String(obj2)
-			
-			if (replaceChar1 != '') fileItem = fileItem.replace(re1, replaceWith1);
-			if (replaceChar2 != '') fileItem = fileItem.replace(re2, replaceWith2);
-			//if (debugShowObject) console.log(fileItem);
-			
-			fileText += textDelim + fileItem + textDelim + delim
-		});
-		fileText += rowDelim
-	});
-	
-	//need to remove last delim for each row.
- 
-    if (debugShowObject) console.log(fileText);
-    var hiddenElement = document.createElement('a');
-    hiddenElement.href = 'data:text/csv;charset=utf-8,' + encodeURI(fileText);
-    hiddenElement.target = '_blank';
-    hiddenElement.download = exportTableFilename + '.' + fileExt;
-    hiddenElement.click();
-}
-
+//////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+////  Parse Data			    //////////////////////////////
+//////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////
 function parseData() {
 	if (debug) console.log('debug parseData start');
     // variables for storing the content:
@@ -395,80 +733,137 @@ function parseData() {
 
 	var fetchtime = myDateConverter(new Date(), 'pretty');
 
-	var dataSetTable = []; //holds export table
-	var dataSetTableHeader = []; //holds export table
-	var dataSetTableSection = ''; //holds export table
-
-
-	userDataInHeader();
 	
-	// create the content, section by section:
-    //
-    // TO ADD NEW SECTION: add a function here, OR add it within one of the
-    // functions that is already here if appropriate for correct scoping
-    // (e.g., features related to tasks should have their function put
-    // inside collateAndDisplayTaskData):
     collateAndDisplayData(); //This is one function as memberActivty requires both Member and Guild data.
 
+	userDataInHeader();
+	groupDataInHeader();
 
 	//////////////////////////////////////////////////////////////////////
     ////   Display the HTML that the functions have created   ////////////
     //////////////////////////////////////////////////////////////////////
-    $('#loading .good').hide();
+    $('#loading #statusFetch').text('') //All Done
+	$('#loading .good').hide();
+	$('#posting .good').hide(); // just to be sure
     $('#documentationAndFormClose').show();
     $('#documentationAndForm').hide();
 	
-	//formatAndDisplayDASHBOARD();
-    //formatAndDisplayTOC();
-    formatAndDisplayMAIN();
+
+	if (($('#MAIN')[0].innerHTML.length > 1)) {
+		//Keep previous table settings
+		refreshAndDisplayMAIN([]);
+	} else {
+		formatAndDisplayMAIN();
+	}
 
 	if (markReadOption == true) postMarkRead()
 	
+	
+	
 	function formatAndDisplayMAIN() {
 		//Currently Single Section
+		var keys = [];
+		var keyToAdd = ''
+		
+		$.each(sectionsToDisplay, function(index, obj){
+			keyToAdd=''
+			if (obj.showOnly.length == 0 || (obj.showOnly.includes('party') && groupId == 'party') || (obj.showOnly.includes('leader') && userId == group.leader.id)){
+				keyToAdd = obj.id
+				if (obj.type == 'heading') keyToAdd = ''
+				if (keyToAdd != '') keys.push(keyToAdd)
+			}
+		});
+		if (debugShowObject) console.log(keys);
+		
 		var html = '';
 		var functions = []; // functions to run after HTML code has been loaded
 		var functionsPar = []; //Par to be passed in Function
-		
-		var data = MAIN['displayInbox'];
-        if (! data) {
-            //continue;
-        }
-        html += '<div id="' +
-                'MAIN' + data.id     + '"><h2>' +
-                data.title  + '</h2>' +
-                data.html   +
-                ((data.longContent) ? '<div class="mainSectionClose closer">' +
-                                      'close / back to top</div>' : '') +
-                '</div>';
-        if (data['function']) {
-            functions.push(data['function']);
-			functionsPar.push(data['functionPar']);
-        }	
-	
-		
-		
-		//html = '<div id="headerExport"></div>' + html;
-//<hr class="clear" />
-	    $('#MAIN').html(html);
-		//exportOptionInHeader();
-		if (debug) console.log('Main replaced')
-		if (debugShowObject) console.log(html)
+		for (var i=0,ic=keys.length; i<ic; i++) {
+			var data = MAIN[keys[i]];
+			if (! data) {
+				continue;
+			}
+			html += '<div id="' +
+					data.id     + '">' +
+					data.html   +
+					((data.longContent) ? '<div class="mainSectionClose closer">' +
+										  'close / back to top</div>' : '') +
+					'</div>';
+			if (data['function']) {
+				functions.push(data['function']);
+				functionsPar.push(data['functionPar']);
+			}
+		}
+		$('#MAIN').html(html);
 		// execute any functions that need to be run AFTER the bulk of the
 		// HTML has been created:
 		$.each(functions, function(index,fn){
 			var passPar = functionsPar[index];
 			fn(passPar);
 		});
-		if (sectionOpen && sectionOpen != 'documentationAndForm'
-						&& sectionOpen != 'versionChanges'
+		if (sectionOpen && sectionOpen  !=  'documentationAndForm'
+						&& sectionOpen  !=  'versionChanges'
 		) {
 			// reopen the section that the user had open before re-fetching
 			// data (except for sections that don't display the user's own data):
 			$('#' + sectionOpen).show();
 			openRelatedSections();
 		}
-		if (debug) console.log('End of Main output')
+	}
+
+	function refreshAndDisplayMAIN(sectionToRefresh) {
+		// Not required to be changed. Section controlled by Sections defined above.
+		var keys = [];
+		var keyToAdd = ''
+		
+		$.each(sectionsToDisplay, function(index, obj){
+			keyToAdd=''
+			if (obj.showOnly.length == 0 || (obj.showOnly.includes('party') && groupId == 'party') || (obj.showOnly.includes('leader') && userId == group.leader.id)){
+				keyToAdd = obj.id
+				if (obj.type == 'heading') keyToAdd = ''
+				if (sectionToRefresh.length != 0) {
+					$.each(sectionToRefresh, function(index2, obj2){
+						if (obj.id.startsWith(obj2) == false) keyToAdd = ''
+					});
+				}
+				if (keyToAdd != '') keys.push(keyToAdd)
+			}
+		});
+		if (debugShowObject) console.log(keys);
+		
+		var html = '';		
+		var functions = []; // functions to run after HTML code has been loaded
+		var functionsPar = []; //Par to be passed in Function
+		for (var i=0,ic=keys.length; i<ic; i++) {
+			var data = MAIN[keys[i]];
+			if (! data) {
+				continue;
+			}
+
+			html = data.refreshHtml
+			$('#' + data.id + ' #' + data.refreshId).html(html)
+			
+			if (data['function']) {
+				functions.push(data['function']);
+				functionsPar.push(data['functionPar']);
+			}
+		}
+
+		// execute any functions that need to be run AFTER the bulk of the
+		// HTML has been created:
+		$.each(functions, function(index,fn){
+			var passPar = functionsPar[index];
+			fn(passPar);
+		});
+		if (sectionOpen == '') sectionOpen = 'displayInboxSection'
+		if (sectionOpen && sectionOpen  !=  'documentationAndForm'
+						&& sectionOpen  !=  'versionChanges'
+		) {
+			// reopen the section that the user had open before re-fetching
+			// data (except for sections that don't display the user's own data):
+			$('#' + sectionOpen).show();
+			openRelatedSections();
+		}
 	}
 	
 	openRelatedSections = function() {
@@ -490,57 +885,67 @@ function parseData() {
 		);
 		$('#refetch').click(function(event){
 			/* The user clicked on the Re-Fetch My Data button. */
+			$(document).unbind('click'); //remove random elements listeners
+			$(document).unbind('change'); //remove random elements listeners
 			fetchData();
 		});
 	}
 
-	function exportOptionInHeader() {
-		var displayName = renderFormattedText(user.profile.name, {'removeParaTags':true});
+	function groupDataInHeader() {
 		
-		$('#headerExport').html('<div id="exportCSVFile">' +
-				'<input id="exportCSVFileButton" type="submit" value="Download CSV File" />' +
-				'</div><div id="exportTabDelimFile">' +
-				'<input id="exportTabDelimFileButton" type="submit" value="Download Tab Delimited File" />' +
-				'</div>'  				
-				
+	
+		$('#headerGroupExtras').html('<div id="groupNameDisplay">' +
+				sectionTables["displayInboxSection"].dataSet.length +
+				' messages in Inbox. ' +
+				'&nbsp;&nbsp;&nbsp;&nbsp;'+
+				'<input id="deleteAllMessages" type="submit" value="Delete All Messages" />' +
+				'&nbsp;&nbsp;&nbsp;&nbsp;'+
+				'<input id="messageByUserId" type="submit" value="Message By User Id" />' +
+				'</div>'  	
+		
 		);
-		$('#exportCSVFileButton').click(function(event){
-			/* The user clicked on the Re-Fetch My Data button. */
-			downloadTextTable(',', '"', '\n', '"', '\'\'', '', '', 'csv');
+		$('#deleteAllMessages').click(function(event){
+			postDeleteAllMessages()
+		});
+		$('#messageByUserId').click(function(event){
+			postMessageUserByUserId()
 		});
 		
-		$('#exportTabDelimFileButton').click(function(event){
-			/* The user clicked on the Re-Fetch My Data button. */
-			downloadTextTable('\t', '"', '\n', '"', '\'\'', '', '', 'txt');
-		});
 	}
-	function myDateConverter(date, style) { 
-//		if (debug) console.log ('debug My Date Convertor');
-//		if (debugShowObject) console.log (date);
-		//if (typeof date === 'string' || typeof date === 'date') {
-//			date = new Date(date);
-//		}
-//		if (!date || isNaN(date.getTime())) {
-			// Either the object that was passed in is not a Date object,
-			// OR the date string that was passed in could not be converted
-			// to a Date object, presumably because it's in a non-standard
-			// format. We handle this by using today's date. It's a nasty
-			// hack, but it's unlikely to occur, and no one's paying for
-			// anything better.
-//			date = new Date();
-//		}
+	
 
+	//////////////////////////////////////////////////////////////////////
+    ////   Formatting Functions used throughout  			  ////////////
+    //////////////////////////////////////////////////////////////////////	
+	
+	function myDateConverter(date, style) { 
+
+		var dateStr = '';
+					
 		if (style === 'pretty') {
-			var dateStr = moment(date).format('Do MMM YYYY, H:mm:ss');
+			dateStr = moment(date).format('Do MMM YYYY, H:mm:ss');
 		} else if (style === 'short') {
-			var dateStr = moment(date).format('YYYY-MM-DD H:mm:ss');
+			if (date == neverDate) {
+				dateStr = '-N/A-'
+			} else {
+				dateStr = moment(date).format('YYYY-MM-DD H:mm:ss');
+			}
 		} else if (style === 'long') {
-			var dateStr = moment(date).format('ddd Do MMMM YYYY, h:mm:ss a');
+			dateStr = moment(date).format('ddd Do MMMM YYYY, h:mm:ss a');
+		} else if (style === 'utcTime') {
+			dateStr = moment(date).utc().toISOString();
+		} else if (style === 'relativeTime') {
+			if (date == neverDate) {
+				dateStr = '-N/A-'
+			} else {
+				dateStr = moment(date).fromNow();
+			}
 		}	else {
 			var dateStr = moment(date).format(style);
 		}
 		return dateStr;
-	}	
+	}
+
 	
 	function renderFormattedText(text, options) {
 		var md = window.habiticaMarkdown;
@@ -558,164 +963,103 @@ function parseData() {
 		}
 		return text;
 	}
-	
-	function collateAndDisplayData() {
-		//rearrange data
-		
-		//format collate Data -- one function
-		formatAllDataAndCollateSimpleTables();
-		
-		//create html
-		displayInboxSection()
-		
-		function formatAllDataAndCollateSimpleTables() {
-			if (debug) console.log('debug formatAllDataAndCollateSimpleTables with option ' + String(exportOption))
-			var arrayToAdd = []; 
-			
-			//inbox data format and collate
-			
-			//Clear arrays
-			//$.each(sectionsToDisplay, function(index, obj){
-			//	if (obj.type == 'sectionTable'){
-			//		sectionTables[obj.id].dataSet=[];
-			//	}
-			//});
-			sectionTables['displayInboxSection'].dataSet=[];
-			
 
-			$.each(user.inbox.messages, function(index, obj){
-				modifyInboxProperties(obj);
-				//if (debugShowObject) console.log(obj);
-				//$.each(sectionsToDisplay, function(index2, obj2){
-				//	if (obj2.type == 'sectionTable' && (obj2.showOnly != 'party' || groupId == 'party')){
-				//		if (sectionTables[obj2.id].type == 'chat'){
-							arrayToAdd = []; //clear array
-							$.each(sectionTables['displayInboxSection'].dataTable, function(index3, obj3){
-								arrayToAdd.push(eval('obj.' + obj3))
-							});
-							//Don't include system messatges if chatNotSystemExport
-							sectionTables['displayInboxSection'].dataSet.push(arrayToAdd); 
-				//		}	
-				//	}
-				//})
+
+	function renderFormattedText(text, options) {
+		var md = window.habiticaMarkdown;
+		if (text != undefined) {
+			if (exportFormats[exportFormat].convertMarkup) text = md.render(text);
+			if (exportFormats[exportFormat].removeHtml) text = $(text).text();
+			if (exportFormats[exportFormat].convertLineBreaks) text = text.replace(/(?:\r\n|\r|\n)/g, '<br />');
+			if (options && options.removeParaTags) {
+				text = String(text).replace(/^<p>|<\/p>\n$/g, '');
+			}
+			else if (options && options.setParaClass) {
+				text = String(text).replace(/<p>/g,
+						   '<p class="' + options.setParaClass + '">');
+			}
+		}
+		return text;
+	}
+	
+	function toTitleCase(str)
+	{
+		return str.replace(/\w\S*/g, function(txt){return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();});
+	}
+	
+	function constructTable(passPar) {
+		//Called in Main to display table(s).
+		//Will need to be added to add buttons and row selection on the fly.
+		var formattedTableHeader = [];
+		var dataSetSectionId = passPar[0];
+		var dataSetTable = passPar[1];
+		var dataSetTableHeader = passPar[2];
+		var dataSetTableSection = passPar[3];
+		
+		var defaultShow = []
+		var defaultOrderBy = []
+		var buttonCollectionColumnOption = []
+		var selectValue = false
+		var showButtons = []
+		var allColumnDefs = []
+		
+		var showOptions = []
+		var hideOptions = []
+		
+		if (debug) console.log('debug constructTable ' + dataSetSectionId);		
+		
+		if ($('#'+ dataSetTableSection)[0].rows.length != 0){
+			if (debug) console.log ('Table exists')
+
+			var table = $('#'+ dataSetTableSection).DataTable();
+
+			table.clear();
+			table.draw();
 				
-			});
-			if (debugShowObject) console.log(sectionTables);
-		};
-		
-		function modifyInboxProperties(obj) {
-			obj.textPretty  = renderFormattedText(obj.text, {'setParaClass':'chatText'});
-			if (obj.uuid == 'system') {
-				obj.userPretty = 'System'
-			} else {
-				obj.userPretty = renderFormattedText(obj.user, {'setParaClass':'userName'});
-			}
-			obj.creation  = reformatDate(obj.timestamp);
-			//if (debugShowObject) console.log(obj);
-			if (obj.contributor  !=  undefined ) {
-				if (obj.contributor.text  !=  undefined ) {
-					obj.contribPretty = [];
-					obj.contribPretty.text = obj.contributor.text;
-					if (obj.contributor.level != undefined)	{
-						obj.contribPretty.level = obj.contributor.level
-					} else {
-						obj.contribPretty.level = '';
-					};
-					if (obj.contributor.contributions  !=  undefined){
-						obj.contribPretty.contributions = obj.contributor.contributions;
-					} else {
-						obj.contribPretty.contributions = '';
-					}
-					if (obj.contributor.admin === true) {
-						obj.contribPretty.admin = true
-					} else {
-						obj.contribPretty.admin  = false
-					}
-				} else {
-					obj.contribPretty = [];
-					obj.contribPretty.text = '';
-					obj.contribPretty.level = '';
-					obj.contribPretty.contributions = '';
-					obj.contribPretty.admin = false;
-				}
-			} else {
-				obj.contribPretty = [];
-				obj.contribPretty.text = '';
-				obj.contribPretty.level = '';
-				obj.contribPretty.contributions = '';
-				obj.contribPretty.admin = false;
-			}
-			if (obj.sent === true) {
-				obj.sentPretty = 'true'
-			} else {
-				obj.sentPretty = 'false'
-			}
-		}
-		
-		function reformatDate(dateString) {
-				var formattedDate = myDateConverter(dateString, 'long');
-				var shortDate     = myDateConverter(dateString, 'short');
-				return { 'dateAndTime': formattedDate,
-						 'shortDate': shortDate };
-		}
-		
-		function displayInboxSection() {
-			var id    = 'displayInboxSection';
-			var title = 'Display All Inbox Messages';
-			var subTitle = '' //exportOptions[exportOption].shortDesc + ' with ' + exportFormats[exportFormat].shortDesc + ' Format'
-			var orderId = 'displayInbox';
-			var tableSectionId = 'displayInboxSection';
-			var html = formatTableData(sectionTables['displayInboxSection'].dataSet, sectionTables['displayInboxSection'].dataSetHeader, subTitle, tableSectionId);
-			if (! html) {
-				return;
-			}
-			TOC[orderId] = {'target': id, 'title':  title};
-			MAIN[orderId] = {'id': id, 'title': title, 'longContent': true,
-				'html': html, 'dataSetTbl': sectionTables['displayInboxSection'].dataSet, 'dataSetTblHdr': sectionTables['displayInboxSection'].dataSetHeader, 'dataSetTblFilename': 'inbox', 'dataSetTblSection': tableSectionId, 'function': constructTable, 'functionPar':  ['displayInboxSection', sectionTables['displayInboxSection'].dataSet, sectionTables['displayInboxSection'].dataSetHeader, 'displayInboxSection']};
-				
-			
-		}
-		
-		function formatTableData(objTable, objTableHeader, title, tableId) {
-			var html = '';
-			
-			html += '<table id="' + tableId + '" class="display" width="100%"></table>'
-			
-			if (html) {
-				return '<h3>' + title + '</h3>' + '<p><div id="headerExport"></div></p>' + html ;
-			}
-			else {
-				return '';
-			}
-		}
-		
-		function constructTable(passPar) {
-			//Called in Main to display table(s).
-			//Will need to be added to add buttons and row selection on the fly.
-			
-			if (debug) console.log('debug constructTable');
-			var formattedTableHeader = [];
-			var dataSetSectionId = passPar[0];
-			var dataSetTable = passPar[1];
-			var dataSetTableHeader = passPar[2];
-			var dataSetTableSection = passPar[3];
-			
-			var defaultShow = []
-			var defaultOrderBy = []
-			var buttonCollectionColumnOption = []
-			var selectValue = false
-			var showButtons = []
-			
-			var showOptions = []
-			var hideOptions = []
-		
-		
-		
+			table.rows.add(dataSetTable);
+			table.draw()
+		} else {
+			if (debug) console.log ('Table does not exists')
 			//create column header
 			$.each(dataSetTableHeader, function(index, obj){
 				formattedTableHeader.push({'title': obj, 'classname': dataSetTableSection + '_' + obj.replace(/ /g, ''),  'defaultContent': ''})
 			});
 			
+			if (debugShowObject) console.log(formattedTableHeader);
+			
+			
+			showButtons = formatShowButton()
+			
+			if (debugShowObject) console.log(showButtons);
+
+			allColumnDefs = [
+				{ targets: defaultShow, visible: true},
+				{ targets: '_all', visible: false }
+			]
+			allColumnDefs = allColumnDefs.concat(sectionTables[dataSetSectionId].extraColumnDefs)
+			
+			if (debugShowObject) console.log(allColumnDefs);
+
+			
+			sectionTables[dataSetSectionId].events = $('#events');
+			$(document).ready(function() {
+				sectionTables[dataSetSectionId].table = $('#'+ dataSetTableSection).DataTable( {
+					data: dataSetTable,
+					columns: formattedTableHeader,
+					columnDefs: allColumnDefs,
+					order: defaultOrderBy,
+					lengthMenu: [ [10, 25, 50, 100, 200, 500, -1], [10, 25, 50, 100, 200, 500, "All"] ],
+					select: selectValue, 
+					dom: 'Bfrtip',
+					buttons: showButtons
+					
+				} );
+			} );
+		}
+		
+		function formatShowButton() {
+			var returnButtons = []
+		
 		
 			//create export options
 			$.each(exportOptions, function(index, obj){
@@ -740,7 +1084,7 @@ function parseData() {
 									text: obj.shortDesc,
 									show: showOptions[obj.id],
 									hide: hideOptions[obj.id],
-									className: 'columnGroup'
+									className: 'columnGroupButton'
 								})					
 			});
 			buttonCollectionColumnOption.push('columnsToggle')
@@ -749,8 +1093,8 @@ function parseData() {
 			
 			if (debugShowObject) console.log(showOptions);		
 			if (debugShowObject) console.log(hideOptions);	
-
-			showButtons = [
+		
+			returnButtons = [
 				 'pageLength', 
 				 {
 					extend: 'collection',
@@ -815,32 +1159,224 @@ function parseData() {
 					autoClose: true
 				}
 			]
+
+			//Leadership buttons
+			var chatMessageButton = [
+				{
+					text: 'Delete Message',
+					action: function ( e, dt, node, config ) {
+						var rowData = sectionTables[dataSetSectionId].table.rows( { selected: true } ).data().toArray();
+						var pmidIndex = sectionTables[dataSetSectionId].pmidIndex;
+						var nameIndex = sectionTables[dataSetSectionId].nameIndex;
+						postDeleteMessage(rowData, pmidIndex, nameIndex)
+					},
+					className: 'deleteMessageButton'		
+				},
+				{
+					text: 'Message User',
+					action: function ( e, dt, node, config ) {
+						var rowData = sectionTables[dataSetSectionId].table.rows( { selected: true } ).data().toArray();
+						var uuidIndex = sectionTables[dataSetSectionId].uuidIndex;
+						var nameIndex = sectionTables[dataSetSectionId].nameIndex;
+						postMessageUser(rowData, uuidIndex, nameIndex)	
+					},
+					className: 'messageUserButton'
+				}
+			]
+			returnButtons = returnButtons.concat(chatMessageButton)
+			selectValue = true
+			
+			if (sectionTables[dataSetSectionId].extraButton != undefined) {
+				var extraButton = sectionTables[dataSetSectionId].extraButton();
+				returnButtons = returnButtons.concat(extraButton)
+				selectValue = true
+			}
+			
+			return returnButtons
+		}
+
+
+	}
+
+
+
+
+	
+	//////////////////////////////////////////////////////////////////////
+    ////   Collate and Display Data  					 ////////////
+    //////////////////////////////////////////////////////////////////////	
+	function collateAndDisplayData() {
+		//rearrange data
 		
-			if (debugShowObject) console.log(dataSetTable);		
-			if (debugShowObject) console.log(formattedTableHeader);		
-			if (debugShowObject) console.log(defaultShow);		
-			if (debugShowObject) console.log(defaultOrderBy);		
-			if (debugShowObject) console.log(selectValue);		
-			if (debugShowObject) console.log(showButtons);		
-			if (debugShowObject) console.log(dataSetTableSection);		
+		//format collate Data -- one function
+		formatAllDataAndCollate();
 		
-			sectionTables[dataSetSectionId].events = $('#events');
-			$(document).ready(function() {
-				sectionTables[dataSetSectionId].table = $('#'+ dataSetTableSection).DataTable( {
-					data: dataSetTable,
-					columns: formattedTableHeader,
-					columnDefs: [
-						{ targets: defaultShow, visible: true},
-						{ targets: '_all', visible: false }
-					],
-					order: defaultOrderBy,
-					lengthMenu: [ [10, 25, 50, 100, 200, 500, -1], [10, 25, 50, 100, 200, 500, "All"] ],
-					select: selectValue, 
-					dom: 'Bfrtip',
-					buttons: showButtons
-					
-				} );
-			} );
+		//run functions to create for TOC / MAIN 
+		$.each(sectionsToDisplay, function(index, obj){
+			if (obj.type == 'sectionTable') {
+				if (obj.showOnly.length == 0 || (obj.showOnly.includes('party') == true && groupId == 'party') || (obj.showOnly.includes('leader') == true && ((userId == group.leader.id) || (userIsAdmin)))) {
+					formatTableSection(obj.id, obj.title)
+				}
+			} else if (obj.type == 'sectionCustom') {
+				var fn = obj.functionCreate
+				eval(fn + '("' + obj.id + '", "' + obj.title + '")')
+			}
+			
+		});
+		
+		
+		
+	//////////////////////////////////////////////////////////////////////
+    ////   Prep data before using                            ////////////
+	//
+	//     This is where you modify data to be used throughout
+	//     All data is modified here
+    //////////////////////////////////////////////////////////////////////
+		function formatAllDataAndCollate() {
+			if (debug) console.log('debug formatAllDataAndCollate')
+			var arrayToAdd = []; 
+			
+			//inbox data format and collate
+			
+			//Clear arrays
+			//$.each(sectionsToDisplay, function(index, obj){
+			//	if (obj.type == 'sectionTable'){
+			//		sectionTables[obj.id].dataSet=[];
+			//	}
+			//});
+			sectionTables['displayInboxSection'].dataSet=[];
+			
+
+			$.each(user.inbox.messages, function(index, obj){
+				modifyInboxProperties(obj);
+
+				$.each(sectionsToDisplay, function(index2, obj2){
+					if (obj2.type == 'sectionTable' && (obj2.showOnly.includes('party') != true || groupId == 'party')) {
+						if (sectionTables[obj2.id].type == 'inbox'){
+							addToArray = []; //clear array
+							$.each(sectionTables[obj2.id].dataTable, function(index3, obj3){
+								addToArray.push(eval('obj.' + obj3))
+							});
+							//Don't include system messages if chatNotSystemExport
+							sectionTables[obj2.id].dataSet.push(addToArray); 
+						}
+						
+					}
+				});
+
+			});
+			if (debugShowObject) console.log(sectionTables);
+		};
+		
+		function modifyInboxProperties(obj) {
+			obj.textPretty  = renderFormattedText(obj.text, {'setParaClass':'chatText'});
+			if (obj.uuid == 'system') {
+				obj.userPretty = 'System'
+				obj.userNotPretty = 'System'
+			} else {
+				obj.userPretty = renderFormattedText(obj.user);
+				obj.userNotPretty = renderFormattedText(obj.user, {removeParaTags: true});
+			}
+			obj.creation  = reformatDate(obj.timestamp);
+			//if (debugShowObject) console.log(obj);
+			if (obj.contributor  !=  undefined ) {
+				if (obj.contributor.text  !=  undefined ) {
+					obj.contribPretty = [];
+					obj.contribPretty.text = obj.contributor.text;
+					if (obj.contributor.level != undefined)	{
+						obj.contribPretty.level = obj.contributor.level
+					} else {
+						obj.contribPretty.level = '';
+					};
+					if (obj.contributor.contributions  !=  undefined){
+						obj.contribPretty.contributions = obj.contributor.contributions;
+					} else {
+						obj.contribPretty.contributions = '';
+					}
+					if (obj.contributor.admin === true) {
+						obj.contribPretty.admin = true
+					} else {
+						obj.contribPretty.admin  = false
+					}
+				} else {
+					obj.contribPretty = [];
+					obj.contribPretty.text = '';
+					obj.contribPretty.level = '';
+					obj.contribPretty.contributions = '';
+					obj.contribPretty.admin = false;
+				}
+			} else {
+				obj.contribPretty = [];
+				obj.contribPretty.text = '';
+				obj.contribPretty.level = '';
+				obj.contribPretty.contributions = '';
+				obj.contribPretty.admin = false;
+			}
+			if (obj.sent === true) {
+				obj.sentPretty = 'true'
+			} else {
+				obj.sentPretty = 'false'
+			}
+		}
+		
+		function reformatDate(dateString) {
+				var formattedDate = myDateConverter(dateString, 'long');
+				var shortDate     = myDateConverter(dateString, 'short');
+				var relativeTime  = myDateConverter(dateString, 'relativeTime');
+				var utcTime  = myDateConverter(dateString, 'utcTime');
+				return { 'dateAndTime': formattedDate,
+						 'shortDate': shortDate,
+						 'relativeTime': relativeTime,
+						 'utcTime': utcTime
+				};
+		}
+
+		function createAvatar (user) {
+			if (hideAvatar == false) {
+				var wrapper = document.createElement('div');
+				
+				wrapper.appendChild(window.habiticaAvatar({user: user}));
+				
+				return wrapper.innerHTML;
+			}
+		}
+
+		//////////////////////////////////////////////////////////////////////
+		////   Sections 										   ////////////
+		//////////////////////////////////////////////////////////////////////
+		//Custom Section functions here.
+		
+		function formatTableSection(sectionId, title){
+			var id    = sectionId + 'Section';
+			var orderId = sectionId;
+			var tableSectionId = sectionId + 'display';
+			var subTitle = sectionTables[sectionId].subTitle()
+			var refreshId = sectionId + SECTIONREFRESH 
+			var html = formatTableData(subTitle, refreshId, tableSectionId);
+			if (! html) {
+				return;
+			}
+			TOC[orderId] = {'target': id, 'title':  title};
+			MAIN[orderId] = {'id': id, 'title': title, 'longContent': true,
+				'html': html, 'refreshHtml': subTitle, 'refreshId': refreshId,
+				'dataSetTblSection': tableSectionId, 'function': constructTable, 
+				'functionPar':  [sectionId, sectionTables[sectionId].dataSet, sectionTables[sectionId].dataSetHeader, tableSectionId]};
+		}
+		
+		
+		//Function used by sections to create HTML To display table
+		function formatTableData(subText, refreshId, tableId) {
+			//Used by sections above if a table is required in there HTML
+			var html = '';
+			
+			html += '<table id="' + tableId + '" class="display" width="100%"></table>'
+
+			if (html) {
+				return '<span id="' + refreshId + '">' + subText + '</span><p><div id="headerExport"></div></p>' + html ;
+			}
+			else {
+				return '';
+			}
 		}
 	
 	}
@@ -880,6 +1416,19 @@ body {
     color: orange;
 }
 
+#posting {
+    margin-right: 30px;
+    margin-left: 30px;
+    color: orange;
+    font-size: 1.5em;
+    font-weight: bold;
+}
+#posting ul {
+    font-size: 0.8em;
+}
+#posting ul a {
+    color: orange;
+}
 
 .narrowContent {      /* The data should be as wide as the user's window   */
     max-width: 500px; /* but some explanatory paragraphs should be narrow. */
@@ -946,10 +1495,15 @@ ul.padded > li {
 /*********************************************************************
 ****   Page-wide Data Tables   ********************************
 *********************************************************************/
-a.dt-button.columnGroup {
-        color: orange;
-    }
- 
+a.dt-button.deleteMessageButton {
+	color: orange;
+}
+
+a.dt-button.messageUserButton {
+	color: orange;
+}
+
+
     
 /*********************************************************************
 ****   Page-wide Show/Hide Toggling   ********************************
@@ -1002,6 +1556,11 @@ h2 {
     text-align: right;
     font-weight: bold;
     font-size: 2em;
+    margin-bottom: 10px;
+}
+
+#groupNameDisplay {
+    text-align: left;
     margin-bottom: 10px;
 }
 
@@ -1134,13 +1693,9 @@ h2 {
     <span class="showHideToggle" data-target="versionChanges" data-closemainsections="true">(v2.0)</span></h1><!-- VERSION TOGGLE -->
 <div id="headerExtras"></div>
 <hr class="clear" />
-
-<!--
-<p style="font-size:18px; color:orange"><strong>If you are unable to use Habitica, please try with this alternative URL: <a href="https://habitrpg.herokuapp.com/">https://habitrpg.herokuapp.com/</a></strong></p>
-
-<p><i>The usual website is down because the Domain Registrar company that we use is having problems.</i></p>
+<div id="headerGroupExtras"></div>
 <hr class="clear" />
--->
+
 
 <div id="loading">
     <div class="good hide">
@@ -1157,11 +1712,16 @@ h2 {
         </ul>
     </div>
 </div>
-
+<div id="posting">
+	<div class="good hide">
+		<p>Please wait. Posting data to
+		<span id="serverName">Habitica</span>... <span id="statusPost"></span></p>
+	</div>
+</div>
 <div id="versionChanges" class="hide"><!-- VERSION SECTION -->
     <h2>Version History</h2>
     <dl>
-		<dt>2.0 - Rewrite from the top down.<span class="date">2017-10-??</span></dt>
+		<dt>2.0 - Top Down<span class="date">2017-10-??</span></dt>
         <dd><ul>
 	            <li>Features:
                 <ul>
@@ -1179,11 +1739,6 @@ h2 {
 					<li>Minor fixes to formatting of check boxes.</li>
                 </ul>
             </li>		
-	        <li>Bug Fixes:
-                <ul>
-					<li></li>
-               </ul>
-            </li>
 		</ul></dd>		
 		<dt>1.7 - Nothing Flash But Nice To Know<span class="date">2017-08-19</span></dt>
         <dd><ul>
