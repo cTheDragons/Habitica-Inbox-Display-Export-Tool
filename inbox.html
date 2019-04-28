@@ -78,17 +78,17 @@ var sectionTables =	[]
 sectionTables['displayInboxSection'] = {
 	type: 'inbox',
 	dataSet: [], 
-	dataSetHeader: ['User Id', 'User', 'Tier', 'Contributor', 'Contributions', 'Mod', 'Posted', 'Epoch', 'Sent', 'Text', 'Message Id'],
-	dataTable: ['uuid', 'userNotPretty', 'contribPretty.level', 'contribPretty.text', 'contribPretty.contributions', 'contribPretty.admin', 'creation.shortDate', 'timestamp', 'sentPretty', 'textPretty', 'id'],
-	babyBear: {show: [1,6,8,9], orderBy: [[6, 'desc']]},
-	mamaBear: {show: [1,2,3,6,8,9], orderBy: [[6, 'desc']]},
-	papaBear: {show: ['all'], orderBy: [[6, 'desc']]},
-	extraColumnDefs: [{'className': 'dt-center', 'targets': [5,8]}, {'className': 'dt-right', 'targets': [2,6,7]}],
+	dataSetHeader: ['User Id', 'Username', 'Display Name', 'Tier', 'Contributor', 'Contributions', 'Mod', 'Posted', 'Epoch', 'Sent', 'Text', 'Appearance', 'Message Id'],
+	dataTable: ['uuid', 'username', 'userNotPretty', 'contribPretty.level', 'contribPretty.text', 'contribPretty.contributions', 'contribPretty.admin', 'creation.shortDate', 'timestamp', 'sentPretty', 'textPretty', 'userStylesPretty'],
+	babyBear: {show: [1,7,9,10], orderBy: [[7, 'desc']]},
+	mamaBear: {show: [1,2,3,7,9,10], orderBy: [[7, 'desc']]},
+	papaBear: {show: ['all'], orderBy: [[7, 'desc']]},
+	extraColumnDefs: [{'className': 'dt-center', 'targets': [6,9]}, {'className': 'dt-right', 'targets': [3,8]}],
 	subTitle: function (){
 		var html = ''
 		return html 
 	},
-	pmidIndex: 10,
+	pmidIndex: 12,
 	uuidIndex: 0,
 	nameIndex: 1
 }
@@ -256,25 +256,65 @@ if (debug) console.log('debug enableShowHideToggling');
 ////   Get UUID from URL      ////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////
 var url_vars = getUrlVars();
-if (url_vars.uuid || url_vars.userId) {
-	if (url_vars.userId) {
-		$("#userId").val(url_vars.userId);
-	} else {
-		$("#userId").val(url_vars.uuid);
-	}	
-
-	if (url_vars.mark_read) {
+if (url_vars.hasOwnProperty("userId")) {
+	$("#userId").val(url_vars.userId);
+} else if (url_vars.hasOwnProperty("userid")) {
+	$("#userId").val(url_vars.uuid);
+} else if (url_vars.hasOwnProperty("uuid")) {
+	$("#userId").val(url_vars.uuid);
+}
+	
+if (url_vars.mark_read) {
+	if ((url_vars.mark_read == "checked") || (url_vars.mark_read == "true"))
 		$("#markReadOption").prop("checked", true);
 	} else {
 		$("#markReadOption").prop("checked", false);
 	}
-
-	if (url_vars.hide_avatar) {
-		$("#hideAvatar").prop("checked", true);
-	} else {
-		$("#hideAvatar").prop("checked", false);
-	}	
 }
+
+if (url_vars.markread) {
+	if ((url_vars.markread == "checked") || (url_vars.markread == "true"))
+		$("#markReadOption").prop("checked", true);
+	} else {
+		$("#markReadOption").prop("checked", false);
+	}
+}
+
+if (url_vars.markRead) {
+	if ((url_vars.markRead == "checked") || (url_vars.markRead == "true"))
+		$("#markReadOption").prop("checked", true);
+	} else {
+		$("#markReadOption").prop("checked", false);
+	}
+}
+
+
+if (url_vars.hasOwnProperty("hide_avatars")) {
+	if ((url_vars.hide_avatars == "checked") || (url_vars.hide_avatars == "true"))
+		$("#hideAvatar").prop("checked", true);
+	else {
+		$("#hideAvatar").prop("checked", false);
+	}
+}
+
+
+if (url_vars.hasOwnProperty("bear")) {
+		$("#exportOption").val(url_vars.bear + "Bear");
+}
+
+if (url_vars.hasOwnProperty("porridge")) {
+	var selectedPorridge = exportFormat
+
+	$.each(exportFormats, function(index, obj){
+		if (url_vars.porridge == obj.shortDesc.replace(' Porridge', '').toLowerCase()) {
+			selectedPorridge = obj.id;
+		}
+	});	
+	
+	$("#exportFormat").val(selectedPorridge);
+}
+
+
 function getUrlVars() {
     // Function found at http://stackoverflow.com/questions/4656843/jquery-get-querystring-from-url#answer-4656873
     var vars = [], hash;
@@ -1273,10 +1313,22 @@ function parseData() {
 			if (obj.uuid == 'system') {
 				obj.userPretty = 'System'
 				obj.userNotPretty = 'System'
+				obj.username = 'System'
+				obj.userStylesPretty = ''
 			} else {
 				obj.userPretty = renderFormattedText(obj.user);
 				obj.userNotPretty = renderFormattedText(obj.user, {removeParaTags: true});
+				if (obj.username == undefined) {
+					obj.username = noUsernamePrefix + obj.user
+				}
+				if (obj.userStyles != undefined) {
+					obj.userStylesPretty = JSON.stringify(obj.userStyles, null, ' ').replace(/: \{\n\s+/g, ': {').replace(/",\n\s+/g, ', ').replace(/"\n\s+\}/g, '}').replace(/(\r\n|\n|\r)/g,"<br />").replace(/"  "/g, '&nbsp;&nbsp');;
+				} else {
+					obj.userStylesPretty = ''
+				}
+				
 			}
+
 			obj.creation  = reformatDate(obj.timestamp);
 			//if (debugShowObject) console.log(obj);
 			if (obj.contributor  !=  undefined ) {
@@ -1721,6 +1773,21 @@ h2 {
 <div id="versionChanges" class="hide"><!-- VERSION SECTION -->
     <h2>Version History</h2>
     <dl>
+		<dt>2.1 - Time for a Service<span class="date">2019-04-29</span></dt>
+        <dd><ul>
+	            <li>Features:
+                <ul>
+					<li>Adding usernames (with alt if username not defined).</li>
+					<li>Refactor URL input</li>
+				</ul> 
+            </li>
+	        <li>Documentation:
+                <ul>
+					<li>Clean up of code. (LOTS AND LOTS)</li>
+					<li>Minor fixes to formatting of check boxes.</li>
+                </ul>
+            </li>		
+		</ul></dd>	
 		<dt>2.0 - Top Down<span class="date">2017-11-14</span></dt>
         <dd><ul>
 	            <li>Features:
