@@ -79,7 +79,7 @@ sectionTables['displayInboxSection'] = {
 	type: 'inbox',
 	dataSet: [], 
 	dataSetHeader: ['User Id', 'Username', 'Display Name', 'Tier', 'Contributor', 'Contributions', 'Mod', 'Posted', 'Epoch', 'Sent', 'Text', 'Appearance', 'Message Id'],
-	dataTable: ['uuid', 'username', 'userNotPretty', 'contribPretty.level', 'contribPretty.text', 'contribPretty.contributions', 'contribPretty.admin', 'creation.shortDate', 'timestamp', 'sentPretty', 'textPretty', 'userStylesPretty'],
+	dataTable: ['uuid', 'username', 'userNotPretty', 'contribPretty.level', 'contribPretty.text', 'contribPretty.contributions', 'contribPretty.admin', 'creation.shortDate', 'timestamp', 'sentPretty', 'textPretty', 'userStylesPretty', 'id'],
 	babyBear: {show: [1,7,9,10], orderBy: [[7, 'desc']]},
 	mamaBear: {show: [1,2,3,7,9,10], orderBy: [[7, 'desc']]},
 	papaBear: {show: ['all'], orderBy: [[7, 'desc']]},
@@ -1751,7 +1751,7 @@ h2 {
 </head>
 <body><div id="innerBody">	
 <h1><a href="https://habitica.com/">Habitica</a> Inbox Display & Export Tool
-    <span class="showHideToggle" data-target="versionChanges" data-closemainsections="true">(v2.1)</span></h1><!-- VERSION TOGGLE -->
+    <span class="showHideToggle" data-target="versionChanges" data-closemainsections="true">(v2.2)</span></h1><!-- VERSION TOGGLE -->
 <div id="headerExtras"></div>
 <hr class="clear" />
 <div id="headerGroupExtras"></div>
@@ -1782,6 +1782,14 @@ h2 {
 <div id="versionChanges" class="hide"><!-- VERSION SECTION -->
     <h2>Version History</h2>
     <dl>
+		<dt>2.2 - Missing on delete<span class="date">2019-04-29</span></dt>
+        <dd><ul>
+            <li>Bug Fixes:
+                <ul>
+					<li>Put Message Id back, so messages can be deleted.</li>
+				</ul>
+			</li>	
+		</ul></dd>
 		<dt>2.1 - Time for a Service<span class="date">2019-04-29</span></dt>
         <dd><ul>
 	            <li>Features:
