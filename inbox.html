@@ -118,7 +118,9 @@ var warningMessage			= 	'PLEASE ENSURE YOUR MESSAGE IS:\n' +
 								'\n' +
 								'\nFailure to do so can lead to minor consequences (like warnings) to severe consequences including account bans & deletions.' +
 								'\n' +
-								'\nIf you have any concerns, please email Lemoness (leslie@habitica.com) for clarification.'
+								'\nIf you have any concerns, please email Lemoness (admin@habitica.com) for clarification.'
+var infoMessage					= 'To add a new line type {nl}.' + 
+								'\nFor a paragraph break {nl}{nl}.'
 
 var serverName               = 'Habitica'; // used in "loading" message
 var serverUrl                = 'https://habitica.com/api/v3';
@@ -164,6 +166,7 @@ if (debug) console.log('debug enableShowHideToggling');
 	$('#exportOptionDesc').html(htmlDesc)
 	
     $('body').on('click', '.showHideToggle', function(event){
+		if (debug) console.log('debug body click showHideToggle');
         var target = $(this).data("target");
         var wantToShow = (! $('#' + target).is(':visible')
                        || $(this).data("forceopen"));
@@ -172,9 +175,11 @@ if (debug) console.log('debug enableShowHideToggling');
             // unless the toggle's attributes force it to always be
             // opened (e.g., a link from the dashboard)
         var linktext = $(this).data("linktext") || false;
+		
         if ($(this).data("closemainsections")) {
             $('#MAIN > *').hide();
-        }
+        } 
+		
         if (wantToShow) {
             sectionOpen = target;
             $('#' + target).show();
@@ -191,6 +196,7 @@ if (debug) console.log('debug enableShowHideToggling');
             if ($(this).data("scrolltotop")) {
                 window.scrollTo(0, 0);
             }
+			if (sectionOpen != 'displayInboxSection') $('#MAIN > *').show();
         }
         var toggleTarget = $(this).data("resettoggletext") || false;
         if (toggleTarget) {
@@ -198,7 +204,9 @@ if (debug) console.log('debug enableShowHideToggling');
                         + $('#' + toggleTarget).data("linktext"));
         }
     });
+	
     $('body').on('click', '.mainSectionClose', function(event){
+		if (debug) console.log('debug body click mainSectionClose');
         $('#headerExport > *').hide();
 		$('#MAIN > *').hide();
         window.scrollTo(0, 0);
@@ -265,23 +273,19 @@ if (url_vars.hasOwnProperty("userId")) {
 }
 	
 if (url_vars.mark_read) {
-	if ((url_vars.mark_read == "checked") || (url_vars.mark_read == "true"))
+	if ((url_vars.mark_read == "checked") || (url_vars.mark_read == "true")) {
 		$("#markReadOption").prop("checked", true);
 	} else {
 		$("#markReadOption").prop("checked", false);
 	}
-}
-
-if (url_vars.markread) {
-	if ((url_vars.markread == "checked") || (url_vars.markread == "true"))
+} else if (url_vars.markread) {
+	if ((url_vars.markread == "checked") || (url_vars.markread == "true")) {
 		$("#markReadOption").prop("checked", true);
 	} else {
 		$("#markReadOption").prop("checked", false);
 	}
-}
-
-if (url_vars.markRead) {
-	if ((url_vars.markRead == "checked") || (url_vars.markRead == "true"))
+} else if (url_vars.markRead) {
+	if ((url_vars.markRead == "checked") || (url_vars.markRead == "true")) {
 		$("#markReadOption").prop("checked", true);
 	} else {
 		$("#markReadOption").prop("checked", false);
@@ -606,7 +610,9 @@ function postMessageUser(rowData, uuidIndex, nameIndex) {
 		//Check if message to be sent
 		var optionalMessage = 'Thank You!'
 		
-		privateMessage = prompt('Please enter your private message to be sent to the users selected:\n\n' + warningMessage, optionalMessage)
+		privateMessage = prompt('Please enter your private message to be sent to the users selected:\n\n' + warningMessage + '\n\n' + infoMessage, optionalMessage)
+
+		privateMessage = privateMessage.replace(/{nl}/g,'\n');
 
 		//get UniqueRows
 		for(var i = 0; i < rowData.length; i++) {
@@ -841,6 +847,7 @@ function parseData() {
 			var passPar = functionsPar[index];
 			fn(passPar);
 		});
+		if (sectionOpen == '') sectionOpen = 'displayInboxSection'
 		if (sectionOpen && sectionOpen  !=  'documentationAndForm'
 						&& sectionOpen  !=  'versionChanges'
 		) {
@@ -895,6 +902,8 @@ function parseData() {
 			var passPar = functionsPar[index];
 			fn(passPar);
 		});
+		
+		
 		if (sectionOpen == '') sectionOpen = 'displayInboxSection'
 		if (sectionOpen && sectionOpen  !=  'documentationAndForm'
 						&& sectionOpen  !=  'versionChanges'
@@ -1742,7 +1751,7 @@ h2 {
 </head>
 <body><div id="innerBody">	
 <h1><a href="https://habitica.com/">Habitica</a> Inbox Display & Export Tool
-    <span class="showHideToggle" data-target="versionChanges" data-closemainsections="true">(v2.0)</span></h1><!-- VERSION TOGGLE -->
+    <span class="showHideToggle" data-target="versionChanges" data-closemainsections="true">(v2.1)</span></h1><!-- VERSION TOGGLE -->
 <div id="headerExtras"></div>
 <hr class="clear" />
 <div id="headerGroupExtras"></div>
@@ -1779,12 +1788,17 @@ h2 {
                 <ul>
 					<li>Adding usernames (with alt if username not defined).</li>
 					<li>Refactor URL input</li>
+					<li>Able to put carriage returns into message (Clunky but will do for now).</li>
 				</ul> 
             </li>
-	        <li>Documentation:
+			<li>Documentation:
                 <ul>
-					<li>Clean up of code. (LOTS AND LOTS)</li>
-					<li>Minor fixes to formatting of check boxes.</li>
+					<li>Updated email to admin@habitica.com regarding spam messages.</li>
+                </ul>
+            </li>				
+	        <li>Bugs:
+                <ul>
+					<li>Fixed the showing and hiding documentation. No need to refresh to show/hide now!</li>
                 </ul>
             </li>		
 		</ul></dd>	
@@ -1813,7 +1827,7 @@ h2 {
                 <ul>
 					<li>Names now render with markdown based on porridge option.</li>
 				</ul> 
-            </li>
+            </li>		
 	        <li>Bug Fixes:
                 <ul>
                     <li>Removed incorrect references to the Data Display Tool. (Thank you @Alys)</li>
@@ -1963,11 +1977,11 @@ h2 {
 
 	<h2>Possible Future Features</h2>
        <ul>
+		<li>A nicer multi line box when posting messages. (This will need to be done by someone else as the code is currently beyond me)<li>
 		<li><span class="subheading">Other Stuff?</span>: Send me ideas! Contact details are below.</li>
        </ul>
 
        <h2>Known Bugs</h2>
-	   <p>The hiding and closing of sections is a bit funky. One day I will fix it but not today.</p>
        <p>Internet Explorer will produce odd results if you use the "Re-Fetch Data" button. Reloading the page will fix the problem. Avoid using that button. Avoiding Internet Explorer will also work.</p>
        <p>This page will not work correctly on old browsers because it uses modern website features and relies on compliance to standards (both can be lacking in old browsers). <a href="http://browsehappy.com/">Updating your browser is important for general safety on the internet!</a> If you have upgraded your browser to the latest version and are still having problems, please tell me! Contact details are below.</p>
        <p>Regardless of what bugs there might be, this page cannot damage your account. It does not contain any code that could result in any changes being made on Habitica except actions performed through this website/API.</p>
