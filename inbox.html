@@ -118,7 +118,7 @@ var warningMessage			= 	'PLEASE ENSURE YOUR MESSAGE IS:\n' +
 								'\n' +
 								'\nFailure to do so can lead to minor consequences (like warnings) to severe consequences including account bans & deletions.' +
 								'\n' +
-								'\nIf you have any concerns, please email Lemoness (admin@habitica.com) for clarification.'
+								'\nIf you have any concerns, please email Admin (admin@habitica.com) for clarification.'
 var infoMessage					= 'To add a new line type {nl}.' + 
 								'\nFor a paragraph break {nl}{nl}.'
 
@@ -149,6 +149,7 @@ var tellMe = '<a href="https://github.com/cTheDragons">tell me</a>';
 
 var neverDate = '1900-01-01'
 var notAvailableMember = '-Member Not In Listed-'
+var noUsernamePrefix = '-Unknown Username- Display Name: '
 
 //////////////////////////////////////////////////////////////////////
 ////   Allow Show/Hide Toggling to work    ///////////////////////////
@@ -1751,7 +1752,7 @@ h2 {
 </head>
 <body><div id="innerBody">	
 <h1><a href="https://habitica.com/">Habitica</a> Inbox Display & Export Tool
-    <span class="showHideToggle" data-target="versionChanges" data-closemainsections="true">(v2.2)</span></h1><!-- VERSION TOGGLE -->
+    <span class="showHideToggle" data-target="versionChanges" data-closemainsections="true">(v2.3)</span></h1><!-- VERSION TOGGLE -->
 <div id="headerExtras"></div>
 <hr class="clear" />
 <div id="headerGroupExtras"></div>
@@ -1782,6 +1783,19 @@ h2 {
 <div id="versionChanges" class="hide"><!-- VERSION SECTION -->
     <h2>Version History</h2>
     <dl>
+		<dt>2.3 - One should not code at 4am in morning<span class="date">2019-04-29</span></dt>
+        <dd><ul>
+ 			<li>Documentation:
+                <ul>
+					<li>Updated reference for spam email address to generic Admin.</li>
+                </ul>
+            </li>
+			<li>Bug Fixes:
+                <ul>
+					<li>Handled if username is not set.</li>
+				</ul>
+			</li>	
+		</ul></dd>
 		<dt>2.2 - Missing on delete<span class="date">2019-04-29</span></dt>
         <dd><ul>
             <li>Bug Fixes:
