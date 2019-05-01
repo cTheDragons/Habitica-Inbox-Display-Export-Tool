@@ -489,6 +489,8 @@ function postDeleteMessage(rowData, pmidIndex, nameIndex) {
 	if (debugShowObject) console.log(rowData)
 	var urlToPost = ''	
 	var actionNotificationList = ''
+	var actionItem = ''
+	var actionIndex = 0
 	var index = 0
 	var loopList = []
 	
@@ -516,9 +518,16 @@ function postDeleteMessage(rowData, pmidIndex, nameIndex) {
 			}
 		}
 		
+		actionIndex = loopList[0].length
+		
 		for(var i = 0; i < loopList.length; i++)
 		{
-			actionNotificationList += '\n\u2022  '  + loopList[i][pmidIndex] + ' (From: ' + loopList[i][nameIndex] + ')'  
+			actionItem = loopList[i][nameIndex]
+			if (actionItem.substring(0,3) == '<a '){
+				actionItem = actionItem.substring(actionItem.indexOf('>')+1,actionItem.length - ('</a>').length)
+			}
+			actionNotificationList += '\n\u2022  ' + actionItem
+			loopList[i].push(actionItem)
 		}
 		
 
@@ -537,7 +546,7 @@ function postDeleteMessage(rowData, pmidIndex, nameIndex) {
 		
 		obj = loopList[index]
 		urlToPost = serverUrl + serverPathInbox + '/' + obj[pmidIndex] 
-		$('#posting #statusPost').text('Deleting message: ' + obj[pmidIndex] + ' (From: ' + obj[nameIndex] + ')' );
+		$('#posting #statusPost').text('Deleting message: ' + obj[pmidIndex] + ' (From: ' + obj[actionIndex] + ')' );
 		if (debugShowObject) console.log(urlToPost);
 		$.ajax({
 			url: urlToPost,
@@ -568,9 +577,9 @@ function postDeleteMessage(rowData, pmidIndex, nameIndex) {
 
 	function postDeleteMessageSuccess(data){
 		if (debug) console.log('debug postDeleteMessageSucess start');
-		$('#posting #statusPost').text('Succesfully deleted the following message: ' + obj[pmidIndex] + ' (From: ' + obj[nameIndex] + ')' );
+		$('#posting #statusPost').text('Succesfully deleted the following message: ' + obj[pmidIndex] + ' (From: ' + obj[actionIndex] + ')' );
 		if (debugShowObject) console.log(data);
-		actionNotificationList += '\n\u2022  ' + obj[pmidIndex] + ' (From: ' + obj[nameIndex] + ')' 
+		actionNotificationList += '\n\u2022  ' + obj[pmidIndex] + ' (From: ' + obj[actionIndex] + ')' 
 		index++
 		
 		postDeleteMessageCheckCompleted()
@@ -598,6 +607,8 @@ function postMessageUser(rowData, uuidIndex, nameIndex) {
 	if (debugShowObject) console.log(rowData)
 	var urlToPost = ''	
 	var actionNotificationList = ''
+	var actionItem = ''
+	var actionIndex = 0
 	var index = 0
 	var privateMessage = ''
 	var loopList = []
@@ -632,9 +643,16 @@ function postMessageUser(rowData, uuidIndex, nameIndex) {
 			}
 		}
 		
+		actionIndex = loopList[0].length
+		
 		for(var i = 0; i < loopList.length; i++)
 		{
-			actionNotificationList += '\n\u2022  ' + loopList[i][nameIndex]
+			actionItem = loopList[i][nameIndex]
+			if (actionItem.substring(0,3) == '<a '){
+				actionItem = actionItem.substring(actionItem.indexOf('>')+1,actionItem.length - ('</a>').length)
+			}
+			actionNotificationList += '\n\u2022  ' + actionItem
+			loopList[i].push(actionItem)
 		}
 		
 		if ((privateMessage != undefined) && (privateMessage != '') && (privateMessage != null)) {
@@ -658,7 +676,7 @@ function postMessageUser(rowData, uuidIndex, nameIndex) {
 		obj = loopList[index]
 		var newData = {message: privateMessage, toUserId: obj[uuidIndex]}
 		urlToPost = serverUrl + serverPathMessageUser //+ '/' + obj[uuidIndex] + '?message=' + privateMessage
-		$('#posting #statusPost').text('Messaging ' + obj[nameIndex] );
+		$('#posting #statusPost').text('Messaging ' + obj[actionIndex] );
 		if (debugShowObject) console.log(urlToPost);
 		if (debugShowObject) console.log(newData);
 		$.ajax({
@@ -683,7 +701,7 @@ function postMessageUser(rowData, uuidIndex, nameIndex) {
 		if (debug) console.log('debug postMessageUserFailure start');
 		if (debugShowObject) console.log(data);
 		var errData = data;
-		alert('ERROR WITH  ' +  obj[nameIndex] + '\n\n' + errData.responseJSON.error + '\n' + errData.responseJSON.message  + '\n\nPlease refetch your data and try again.');	
+		alert('ERROR WITH  ' +  obj[actionIndex] + '\n\n' + errData.responseJSON.error + '\n' + errData.responseJSON.message  + '\n\nPlease refetch your data and try again.');	
 		index++
 		
 		postMessageUserCheckCompleted()
@@ -692,9 +710,9 @@ function postMessageUser(rowData, uuidIndex, nameIndex) {
 
 	function postMessageUserSuccess(data){
 		if (debug) console.log('debug postMessageUserSucess start');
-		$('#posting #statusPost').text('Successfully Messaged ' + obj[nameIndex] );
+		$('#posting #statusPost').text('Successfully Messaged ' + obj[actionIndex] );
 		if (debugShowObject) console.log(data);
-		actionNotificationList += '\n\u2022  ' + obj[nameIndex]  
+		actionNotificationList += '\n\u2022  ' + obj[actionIndex]  
 		index++
 		
 		postMessageUserCheckCompleted()
