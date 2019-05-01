@@ -79,7 +79,7 @@ sectionTables['displayInboxSection'] = {
 	type: 'inbox',
 	dataSet: [], 
 	dataSetHeader: ['User Id', 'Username', 'Display Name', 'Tier', 'Contributor', 'Contributions', 'Mod', 'Posted', 'Epoch', 'Sent', 'Text', 'Appearance', 'Message Id'],
-	dataTable: ['uuid', 'username', 'userNotPretty', 'contribPretty.level', 'contribPretty.text', 'contribPretty.contributions', 'contribPretty.admin', 'creation.shortDate', 'timestamp', 'sentPretty', 'textPretty', 'userStylesPretty', 'id'],
+	dataTable: ['uuid', 'usernameNotPretty', 'userNotPretty', 'contribPretty.level', 'contribPretty.text', 'contribPretty.contributions', 'contribPretty.admin', 'creation.shortDate', 'timestamp', 'sentPretty', 'textPretty', 'userStylesPretty', 'id'],
 	babyBear: {show: [1,7,9,10], orderBy: [[7, 'desc']]},
 	mamaBear: {show: [1,2,3,7,9,10], orderBy: [[7, 'desc']]},
 	papaBear: {show: ['all'], orderBy: [[7, 'desc']]},
@@ -119,7 +119,7 @@ var warningMessage			= 	'PLEASE ENSURE YOUR MESSAGE IS:\n' +
 								'\nFailure to do so can lead to minor consequences (like warnings) to severe consequences including account bans & deletions.' +
 								'\n' +
 								'\nIf you have any concerns, please email Admin (admin@habitica.com) for clarification.'
-var infoMessage					= 'To add a new line type {nl}.' + 
+var infoMessage				= 	'To add a new line type {nl}.' + 
 								'\nFor a paragraph break {nl}{nl}.'
 
 var serverName               = 'Habitica'; // used in "loading" message
@@ -129,6 +129,7 @@ var serverPathUser           = '/user';
 var serverPathMarkRead		 = '/user/mark-pms-read'
 var serverPathMessageUser	 = '/members/send-private-message'
 var serverPathInbox			 = '/user/messages'	
+var serverHabiticaProfile	 = 'https://habitica.com/profile/'
 
 var userId                   = '';
 var apiToken                 = '';
@@ -1324,13 +1325,20 @@ function parseData() {
 				obj.userPretty = 'System'
 				obj.userNotPretty = 'System'
 				obj.username = 'System'
+				obj.usernameNotPretty = 'System'
+				obj.usernamePretty = 'System'
 				obj.userStylesPretty = ''
 			} else {
-				obj.userPretty = renderFormattedText(obj.user);
-				obj.userNotPretty = renderFormattedText(obj.user, {removeParaTags: true});
+				obj.userPretty = '<a href="' + serverHabiticaProfile + obj.uuid + '" target="_blank">' + renderFormattedText(obj.user) + '</a>';
+				obj.userNotPretty = '<a href="' + serverHabiticaProfile + obj.uuid + '" target="_blank">' + renderFormattedText(obj.user, {removeParaTags: true}) + '</a>';
 				if (obj.username == undefined) {
 					obj.username = noUsernamePrefix + obj.user
+					obj.usernameNotPretty = '<a href="' + serverHabiticaProfile + obj.uuid + '" target="_blank">' + noUsernamePrefix + obj.user + '</a>';
+				} else {
+					obj.usernameNotPretty = '<a href="' + serverHabiticaProfile + obj.uuid + '" target="_blank">' + obj.username + '</a>';
 				}
+				obj.usernamePretty = obj.usernameNotPretty
+				
 				if (obj.userStyles != undefined) {
 					obj.userStylesPretty = JSON.stringify(obj.userStyles, null, ' ').replace(/: \{\n\s+/g, ': {').replace(/",\n\s+/g, ', ').replace(/"\n\s+\}/g, '}').replace(/(\r\n|\n|\r)/g,"<br />").replace(/"  "/g, '&nbsp;&nbsp');;
 				} else {
@@ -1338,7 +1346,6 @@ function parseData() {
 				}
 				
 			}
-
 			obj.creation  = reformatDate(obj.timestamp);
 			//if (debugShowObject) console.log(obj);
 			if (obj.contributor  !=  undefined ) {
@@ -1783,8 +1790,13 @@ h2 {
 <div id="versionChanges" class="hide"><!-- VERSION SECTION -->
     <h2>Version History</h2>
     <dl>
-		<dt>2.3 - One should not code at 4am in morning<span class="date">2019-04-29</span></dt>
+		<dt>2.3 - One should not release code at 4am in morning<span class="date">2019-05-01</span></dt>
         <dd><ul>
+		 	<li>Features:
+                <ul>
+					<li>Made usernames and display names linked to Habitica Profile Page.</li>
+				</ul> 
+            </li>
  			<li>Documentation:
                 <ul>
 					<li>Updated reference for spam email address to generic Admin.</li>
@@ -1806,7 +1818,7 @@ h2 {
 		</ul></dd>
 		<dt>2.1 - Time for a Service<span class="date">2019-04-29</span></dt>
         <dd><ul>
-	            <li>Features:
+	        <li>Features:
                 <ul>
 					<li>Adding usernames (with alt if username not defined).</li>
 					<li>Refactor URL input</li>
