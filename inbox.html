@@ -34,6 +34,7 @@ Contributors:
 	<script src="https://code.jquery.com/jquery-1.12.3.js"></script>
 	<script src="https://momentjs.com/downloads/moment-with-locales.min.js"></script>
 	<script src="js/habitica-markdown.min.js"></script>
+	<script src="js/api-limit.js"></script> <!-- Personal Script used to handle Ajax calls with limiting-->
 	
 	 <!--- https://datatables.net/download/ -->
 	<script type="text/javascript" src="https://cdn.datatables.net/v/dt/jszip-2.5.0/pdfmake-0.1.18/dt-1.10.12/b-1.2.2/b-colvis-1.2.2/b-flash-1.2.2/b-html5-1.2.2/b-print-1.2.2/se-1.2.0/datatables.min.js"></script>
@@ -55,6 +56,7 @@ var user;     // holds user's data
 ////   Global Constants                              /////////////////
 //////////////////////////////////////////////////////////////////////
 var DOUBLEQUOTES = 		'"' //This is to make my life easier... 
+var SINGLEQUOTE = 		"'" //This is to make my life easier...
 var SECTIONREFRESH = 	"SectionRefresh"
 
 
@@ -136,6 +138,7 @@ var apiToken                 = '';
 var markReadOption	 		 = '';
 var exportOption 			 = 0;
 var exportFormat			 = 0;
+var rlCurrent				 = {};  //holds the Current API Remaining details - must be a better way to do this.
 var debug                    = false;
 var debugShowObject          = false;
 
@@ -151,6 +154,12 @@ var tellMe = '<a href="https://github.com/cTheDragons">tell me</a>';
 var neverDate = '1900-01-01'
 var notAvailableMember = '-Member Not In Listed-'
 var noUsernamePrefix = '-Unknown Username- Display Name: '
+
+//////////////////////////////////////////////////////////////////////
+////   Show API Version                   ///////////////////////////
+//////////////////////////////////////////////////////////////////////
+var apiVersion = getApiVersion()
+$('#apiVersion').text(apiVersion);
 
 //////////////////////////////////////////////////////////////////////
 ////   Allow Show/Hide Toggling to work    ///////////////////////////
@@ -361,41 +370,28 @@ function fetchData() {
 
 	var ajaxRunningCount = 2; // drops to 0 when all calls have succeeded	
 
-	// fetch the user's own content (guilds, parties):
-    $.ajax({
-        url: serverUrl + serverPathUser,
-        type: 'GET',
-        dataType: 'json',
-        cache: false,
-        beforeSend: function(xhr){
-                xhr.setRequestHeader('x-api-user', userId);
-                xhr.setRequestHeader('x-api-key',  apiToken);
-            },
-        success: fetchUserSuccess,
-        error: fetchFailure
-    });
-
-	// fetch the site-wide content (gear names and stats, etc):
-    $.ajax({
-        url: serverUrl + serverPathContent,
-        type: 'GET',
-        dataType: 'json',
-        cache: true,
-        success: fetchContentSuccess,
-        error: fetchFailure
-    });
+	var call = []
+	call.push({requestType: 'GET', urlTo: serverUrl + serverPathUser, newData: '', fnSuccess: fetchUserSuccess, fnFailure: fetchFailure, statusText: 'Asking for User Data'})
+	call.push({requestType: 'GET', urlTo: serverUrl + serverPathContent, newData: '', fnSuccess: fetchContentSuccess, fnFailure: fetchFailure, statusText: 'Asking for Generic Content'})
+	makeAjaxCall(call, userId, apiToken, rlCurrent)	
 	
 	
-	function fetchFailure() {
+	
+	function fetchFailure(data, rl) {
         if (debug) console.log('debug fetchFailure start');
+		rlCurrent = rl
         $('#loading .good').hide();
         $('#loading .bad' ).show();
         $('#documentationAndForm').show(); // in case user has done a re-fetch
         $('#documentationAndFormClose').hide();
+		$('#loading #statusError').text('Error : ' + data.responseJSON.error + '  -  ' + data.responseJSON.message ); 
+		console.log(data)
         if (debug) console.log('debug fetchFailure end');
     }
-	function fetchUserSuccess(data) {
+	function fetchUserSuccess(data, rl) {
         if (debug) console.log('debug parseData User success start');
+		rlCurrent = rl
+		
         user = data.data;
 		if (debugShowObject) console.log(user);
         ajaxRunningCount--;
@@ -403,8 +399,10 @@ function fetchData() {
             parseData();
         }
     }
-	function fetchContentSuccess(data) {
+	function fetchContentSuccess(data, rl) {
         if (debug) console.log('debug parseData Content success start');
+		rlCurrent = rl
+		
         content = data.data;
 		if (debugShowObject) console.log(content);
         ajaxRunningCount--;
@@ -439,28 +437,19 @@ function postDeleteAllMessages() {
 	function postNextDeleteAllMessages(){
 		$('#posting .good').show();
 		
-		urlToPost = serverUrl + serverPathInbox 
+		var urlToPost = serverUrl + serverPathInbox 
 		if (debugShowObject) console.log(urlToPost);
-		$('#posting #statusPost').text('Deleting all messages' );
-		$.ajax({
-			url: urlToPost,
-			type: 'DELETE',
-			contentType: 'application/json',
-			dataType: 'json',
-			cache: false,
-			beforeSend: function(xhr){
-					xhr.setRequestHeader('x-api-user', userId);
-					xhr.setRequestHeader('x-api-key',  apiToken);
-				},
-			success: postDeleteAllMessagesSuccess,
-			error: postDeleteAllMessagesFailure
-		});		
+		
+		var call = []
+		call.push({requestType: 'DELETE', urlTo: urlToPost, newData: '', fnSuccess: postDeleteAllMessagesSuccess, fnFailure: postDeleteAllMessagesFailure, statusText: 'Deleting all messages' })
+		makeAjaxCall(call, userId, apiToken, rlCurrent)
 	}
 		
-
-	
-	function postDeleteAllMessagesFailure(data){
+		
+	function postDeleteAllMessagesFailure(data, rl){
 		if (debug) console.log('debug postDeleteAllMessagesFailure start');
+		rlCurrent = rl
+		
 		if (debugShowObject) console.log(data);
 		var errData = data;
 		alert('ERROR WITH Delete All Messages \n\n' + errData.responseJSON.error + '\n' + errData.responseJSON.message  + '\n\nPlease refetch your data and try again.');	
@@ -469,8 +458,10 @@ function postDeleteAllMessages() {
 	}
 
 
-	function postDeleteAllMessagesSuccess(data){
+	function postDeleteAllMessagesSuccess(data, rl){
 		if (debug) console.log('debug postDeleteAllMessagesSuccess start');
+		rlCurrent = rl
+		
 		if (debugShowObject) console.log(data);
 		alert('All messages are deleted.\n\nYour data will now be refreshed.')
 		
@@ -484,10 +475,14 @@ function postDeleteAllMessages() {
 //////////////////////////////////////////////////////////////////////
 ////  Delete PM Message			    //////////////////////////////
 //////////////////////////////////////////////////////////////////////
+// All post functions are implemented serial as they are unreliable when performed in parallel.
+// Waiting on resolve of issues 
+//     https://github.com/HabitRPG/habitica/issues/12521 & 
+//     https://github.com/HabitRPG/habitica/issues/11376#issuecomment-534746769
+//
 function postDeleteMessage(rowData, pmidIndex, nameIndex) {
 	if (debug) console.log('debug postDeleteMessage start');
 	if (debugShowObject) console.log(rowData)
-	var urlToPost = ''	
 	var actionNotificationList = ''
 	var actionItem = ''
 	var actionIndex = 0
@@ -545,29 +540,20 @@ function postDeleteMessage(rowData, pmidIndex, nameIndex) {
 		$('#posting .good').show();
 		
 		obj = loopList[index]
-		urlToPost = serverUrl + serverPathInbox + '/' + obj[pmidIndex] 
-		$('#posting #statusPost').text('Deleting message: ' + obj[pmidIndex] + ' (From: ' + obj[actionIndex] + ')' );
-		if (debugShowObject) console.log(urlToPost);
-		$.ajax({
-			url: urlToPost,
-			type: 'DELETE',
-			dataType: 'json',
-			cache: false,
-			beforeSend: function(xhr){
-					xhr.setRequestHeader('x-api-user', userId);
-					xhr.setRequestHeader('x-api-key',  apiToken);
-				},
-			success: postDeleteMessageSuccess,
-			error: postDeleteMessageFailure
-		});		
+		var urlToPost = serverUrl + serverPathInbox + '/' + obj[pmidIndex] 
+		
+		var call = []
+		call.push({requestType: 'DELETE', urlTo: urlToPost, newData: '', fnSuccess: postDeleteMessageSuccess, fnFailure: postDeleteMessageFailure, statusText: 'Deleting message: ' + obj[pmidIndex] + ' (From: ' + obj[actionIndex] + ')' })
+		makeAjaxCall(call, userId, apiToken, rlCurrent)
+		
 	}
 		
-
 	
-	function postDeleteMessageFailure(UserNotFound){
+	function postDeleteMessageFailure(data, rl){
 		if (debug) console.log('debug postDeleteMessageFailure start');
-		if (debugShowObject) console.log(UserNotFound);
-		var errData = UserNotFound;
+		rlCurrent = rl
+		if (debugShowObject) console.log(data);
+		var errData = data;
 		alert('ERROR WITH  ' +  obj[pmidIndex] + '\n\n' + errData.responseJSON.error + '\n' + errData.responseJSON.message  + '\n\nPlease refetch your data and try again.');	
 		index++
 		
@@ -575,9 +561,10 @@ function postDeleteMessage(rowData, pmidIndex, nameIndex) {
 	}
 
 
-	function postDeleteMessageSuccess(data){
+	function postDeleteMessageSuccess(data, rl){
 		if (debug) console.log('debug postDeleteMessageSucess start');
-		$('#posting #statusPost').text('Succesfully deleted the following message: ' + obj[pmidIndex] + ' (From: ' + obj[actionIndex] + ')' );
+		rlCurrent = rl
+		
 		if (debugShowObject) console.log(data);
 		actionNotificationList += '\n\u2022  ' + obj[pmidIndex] + ' (From: ' + obj[actionIndex] + ')' 
 		index++
@@ -675,30 +662,22 @@ function postMessageUser(rowData, uuidIndex, nameIndex) {
 		
 		obj = loopList[index]
 		var newData = {message: privateMessage, toUserId: obj[uuidIndex]}
-		urlToPost = serverUrl + serverPathMessageUser //+ '/' + obj[uuidIndex] + '?message=' + privateMessage
-		$('#posting #statusPost').text('Messaging ' + obj[actionIndex] );
+		var urlToPost = serverUrl + serverPathMessageUser 
 		if (debugShowObject) console.log(urlToPost);
-		if (debugShowObject) console.log(newData);
-		$.ajax({
-			url: urlToPost,
-			type: 'POST',
-			contentType: 'application/json',
-			data: JSON.stringify(newData),
-			dataType: 'json',
-			cache: false,
-			beforeSend: function(xhr){
-					xhr.setRequestHeader('x-api-user', userId);
-					xhr.setRequestHeader('x-api-key',  apiToken);
-				},
-			success: postMessageUserSuccess,
-			error: postMessageUserFailure
-		});		
+		if (debugShowObject) console.log(newData);	
+		
+		var call = []
+		call.push({requestType: 'POST', urlTo: urlToPost, newData: JSON.stringify(newData), fnSuccess: postMessageUserSuccess, fnFailure: postMessageUserFailure, statusText: 'Messaging ' + obj[actionIndex]} )		
+		makeAjaxCall(call, userId, apiToken, rlCurrent)
+		
 	}
 		
 
 	
-	function postMessageUserFailure(data){
+	function postMessageUserFailure(data, rl){
 		if (debug) console.log('debug postMessageUserFailure start');
+		rlCurrent = rl
+		
 		if (debugShowObject) console.log(data);
 		var errData = data;
 		alert('ERROR WITH  ' +  obj[actionIndex] + '\n\n' + errData.responseJSON.error + '\n' + errData.responseJSON.message  + '\n\nPlease refetch your data and try again.');	
@@ -708,9 +687,10 @@ function postMessageUser(rowData, uuidIndex, nameIndex) {
 	}
 
 
-	function postMessageUserSuccess(data){
+	function postMessageUserSuccess(data, rl){
 		if (debug) console.log('debug postMessageUserSucess start');
-		$('#posting #statusPost').text('Successfully Messaged ' + obj[actionIndex] );
+		rlCurrent = rl
+		
 		if (debugShowObject) console.log(data);
 		actionNotificationList += '\n\u2022  ' + obj[actionIndex]  
 		index++
@@ -756,32 +736,36 @@ function postMessageUserByUserId() {
 //////////////////////////////////////////////////////////////////////
 function postMarkRead() {
 	// fetch the user's own content (guilds, parties):
-    $.ajax({
-        url: serverUrl + serverPathMarkRead,
-        type: 'POST',
-        dataType: 'json',
-        cache: false,
-        beforeSend: function(xhr){
-                xhr.setRequestHeader('x-api-user', userId);
-                xhr.setRequestHeader('x-api-key',  apiToken);
-            },
-        success: postMarkReadSuccess,
-        error: postMarkReadFailure
-    });
 	
-	function postMarkReadFailure() {
+	var urlToPost = serverUrl + serverPathMarkRead
+	if (debugShowObject) console.log(urlToPost);
+	
+	var call = []
+	call.push({requestType: 'POST', urlTo: urlToPost, newData: '', fnSuccess: postMarkReadSuccess, fnFailure: postMarkReadFailure, statusText: 'Marking messages read'} )
+	makeAjaxCall(call, userId, apiToken, rlCurrent)
+	
+	function postMarkReadFailure(data, rl) {
         if (debug) console.log('debug postMarkReadFailure start');
-        $('#loading .good').hide();
-        $('#loading .bad' ).show();
-        $('#documentationAndForm').show(); // in case user has done a re-fetch
-        $('#documentationAndFormClose').hide();
+		rlCurrent = rl
+        
+		var errData = data;
+		alert('ERROR WITH  ' +  obj[actionIndex] + '\n\n' + errData.responseJSON.error + '\n' + errData.responseJSON.message  + '\n\nPlease refetch your data and try again.');	
+		
+		postMarkReadComplete()
+		
         if (debug) console.log('debug postMarkReadFailure end');
     }
 	
-	function postMarkReadSuccess() {
+	function postMarkReadSuccess(data, rl) {
         if (debug) console.log('debug postMarkReadSuccess start');
-		//Nothing to do
+		rlCurrent = rl
+		
+		postMarkReadComplete()
     }
+	
+	function postMarkReadComplete() {
+		$('#loading .good').hide()
+	}
 }
 
 
@@ -808,9 +792,7 @@ function parseData() {
 	//////////////////////////////////////////////////////////////////////
     ////   Display the HTML that the functions have created   ////////////
     //////////////////////////////////////////////////////////////////////
-    $('#loading #statusFetch').text('') //All Done
 	$('#loading .good').hide();
-	$('#posting .good').hide(); // just to be sure
     $('#documentationAndFormClose').show();
     $('#documentationAndForm').hide();
 	
@@ -852,8 +834,8 @@ function parseData() {
 			html += '<div id="' +
 					data.id     + '">' +
 					data.html   +
-					((data.longContent) ? '<div class="mainSectionClose closer">' +
-										  'close / back to top</div>' : '') +
+					//((data.longContent) ? '<div class="mainSectionClose closer">' +
+					//					  'close / back to top</div>' : '') +
 					'</div>';
 			if (data['function']) {
 				functions.push(data['function']);
@@ -1503,20 +1485,6 @@ body {
     color: orange;
 }
 
-#posting {
-    margin-right: 30px;
-    margin-left: 30px;
-    color: orange;
-    font-size: 1.5em;
-    font-weight: bold;
-}
-#posting ul {
-    font-size: 0.8em;
-}
-#posting ul a {
-    color: orange;
-}
-
 .narrowContent {      /* The data should be as wide as the user's window   */
     max-width: 500px; /* but some explanatory paragraphs should be narrow. */
 }
@@ -1631,6 +1599,9 @@ h1>a:first-child:hover { /* "Habitica" link in header */
 }
 h1 span {
     font-size: 0.5em;
+}
+h1 span span {
+    font-size: 1.0em;
 }
 h2 {
     margin-top: 30px;
@@ -1777,7 +1748,7 @@ h2 {
 </head>
 <body><div id="innerBody">	
 <h1><a href="https://habitica.com/">Habitica</a> Inbox Display & Export Tool
-    <span class="showHideToggle" data-target="versionChanges" data-closemainsections="true">(v2.3)</span></h1><!-- VERSION TOGGLE -->
+    <span class="showHideToggle" data-target="versionChanges" data-closemainsections="true">(v3.0- vApi<span class="apiVersion" id="apiVersion"> NOT INSTALLED !</span>)</span></h1><!-- VERSION TOGGLE -->
 <div id="headerExtras"></div>
 <hr class="clear" />
 <div id="headerGroupExtras"></div>
@@ -1786,8 +1757,9 @@ h2 {
 
 <div id="loading">
     <div class="good hide">
-        <p>Please wait. Fetching data from
-        <span id="serverName">Habitica</span>...</p>
+		<p>Please wait. <span id="statusCallType">Fetching</span> data from
+        <span id="serverName">Habitica</span>... <span id="statusMessage"></span></p>
+		<p><span id="statusWait"></span></p>
     </div>
     <div class="bad hide">
         <p>There was an error obtaining your data.</p>
@@ -1797,17 +1769,21 @@ h2 {
             <li>If the page's URL starts with "http://" change it to start with "https://" (or just use <a href="https://oldgods.net/habitica/cTheDragons/inbox.html">this correct link</a>).</li>
             <li>If neither of those help, contact me! See <strong>"Help and Contact Details"</strong> at the bottom of this page.</li>
         </ul>
+		<span id="statusError"></span></p>
     </div>
-</div>
-<div id="posting">
-	<div class="good hide">
-		<p>Please wait. Posting data to
-		<span id="serverName">Habitica</span>... <span id="statusPost"></span></p>
-	</div>
 </div>
 <div id="versionChanges" class="hide"><!-- VERSION SECTION -->
     <h2>Version History</h2>
     <dl>
+		<dt>3.0 - Cookie Cutter<span class="date">2020-09-03</span></dt>
+        <dd><ul>
+		 	<li>Features:
+                <ul>
+					<li>Handling the new Habitica API Limits. </li>
+					<li>Showing version of API as well as version of tool</li>
+				</ul> 
+            </li>
+		</ul></dd>
 		<dt>2.3 - One should not release code at 4am in morning<span class="date">2019-05-01</span></dt>
         <dd><ul>
 		 	<li>Features:
@@ -1996,12 +1972,10 @@ h2 {
             </label>
 			<div id="exportOptionSelector"></div>
             <input type="submit" value="Fetch My Inbox Data" />
+			<p>To ensure quick loads, only use one instance of Third Party Tool at a time.</p>
 			<div id="exportOptionDesc"></div>
             <p class="highlight">Privacy and security notes:</p>
             <ul>
-            <!--<li>If you access this page from the Data menu on the Habitica
-            website, your User ID will be automatically added to the form
-            above.</li> $$$ Maybe one day when the tool is that good--->
             <li>Your API Token is a password - do not share it with anyone,
             not even the maintainer of this page if you are seeking help.</li>
             <li>When you enter your User ID and API Token here and click
